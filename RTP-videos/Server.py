@@ -30,7 +30,6 @@ class RTPCon:
         self.addr = addr
         self.client_rtcp_port = 0
         self.client_rtp_port = 0
-        self.client_audio_port = 0
         self.local_ip = con.getsockname()[0]
         self.session_id = 66334873
         self.media = filename
@@ -62,7 +61,7 @@ class RTPCon:
             self.aseph1.acquire()
             frame = self.astream.nextFrame()
             if frame is not None:
-                self.audio_socket.sendto(frame, (self.addr[0], self.client_audio_port))
+                self.rtp_socket.sendto(frame, (self.addr[0], self.client_rtp_port))
                 #time.sleep(TIME_ELAPSED)
                 self.aseph2.release()
             else:
@@ -102,7 +101,6 @@ class RTPCon:
         if self.state == 'READY':
             self.state = 'SETUP'
             self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.audio_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.seph1 = threading.Semaphore(0)
             self.seph2 = threading.Semaphore(self.buf_size)
             self.aseph1 = threading.Semaphore(0)
@@ -156,7 +154,6 @@ class RTPCon:
         if method == 'SETUP':
             match = re.search(r'client_port\s*=\s*(\d+)-(\d+)', lines[2]).groups()
             self.client_rtp_port, self.client_rtcp_port = int(match[0]), int(match[1])
-            self.client_audio_port = self.client_rtp_port + 2
             self.handleSetup(cseq)
         if method == 'OPTIONS':
             self.handleOptions(cseq)

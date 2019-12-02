@@ -6,6 +6,7 @@ from io import BytesIO
 from RtpPacket import RtpPacket
 import time
 from utils import LinkList
+import sounddevice as sd
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
@@ -38,12 +39,14 @@ class Client:
 		self.requestSent = -1
 		self.teardownAcked = 0
 		self.connectToServer()
-		self.frameNbr = 0
+		self.vframeNbr = 0
+		self.aframeNbr = 0
 		self.frameBuf = b''
 		self.videoBuf = LinkList()
 		self.audioBuf = LinkList()
 		self.play_thread = None
 		self.update_thread = None
+		self.audio_thread = None
 
 	def createWidgets(self):
 		"""Build GUI."""
@@ -79,6 +82,14 @@ class Client:
 		"""Setup button handler."""
 		if self.state == self.INIT:
 			self.sendRtspRequest(self.SETUP)
+		self.samplerate = 44100
+		self.channels = 2
+		self.audioStream = sd.RawOutputStream(
+			samplerate=self.samplerate,
+			channels=self.channels,
+			dtype='float32'
+		)
+		self.audioStream.start()
 
 	def exitClient(self):
 		"""Teardown button handler."""
@@ -104,6 +115,10 @@ class Client:
 				self.update_thread = threading.Thread(target=self.updateMovie)
 				self.update_thread.setDaemon(True)
 				self.update_thread.start()
+			if self.audio_thread is None:
+				self.audio_thread = threading.Thread(target=self.updateAudio)
+				self.audio_thread.setDaemon(True)
+				self.audio_thread.start()
 
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
@@ -117,36 +132,64 @@ class Client:
 					rtpPacket.decode(data)
 					currFrameNbr = rtpPacket.seqNum()
 					marker = rtpPacket.getMarker()
-
-					if currFrameNbr > self.frameNbr:  # Discard the late packet
-						self.frameNbr = currFrameNbr
-						payload = rtpPacket.getPayload()
-						self.restoreFrame(payload, marker)
+					mediatype = rtpPacket.getType()
+					if mediatype == 'video':
+						if currFrameNbr > self.vframeNbr:
+							self.vframeNbr = currFrameNbr
+							payload = rtpPacket.getPayload()
+							self.restoreFrame(payload, marker, 'video')
+					elif mediatype == 'audio':
+						if currFrameNbr > self.aframeNbr:
+							self.aframeNbr = currFrameNbr
+							payload = rtpPacket.getPayload()
+							self.restoreFrame(payload, marker, 'audio')
 			except:
 				if self.teardownAcked == 1:
 					self.rtpSocket.shutdown(socket.SHUT_RDWR)
 					self.rtpSocket.close()
 					break
 
-	def restoreFrame(self, payload, marker):
-		self.frameBuf += payload
-		if marker:
-			self.videoBuf.push(self.frameBuf)
-			self.seph.release()
-			self.frameBuf = b''
+	def restoreFrame(self, payload, marker, mediatype):
+		if mediatype == 'video':
+			self.frameBuf += payload
+			if marker:
+				self.videoBuf.push(self.frameBuf)
+				self.seph.release()
+				self.frameBuf = b''
+		elif mediatype == 'audio':
+			self.audioBuf.push(payload)
+			self.aseph.release()
 
 	def updateMovie(self):
 		while self.videoBuf.len() < 20:
 			pass
 		while True:
-			self.playEvent.wait()
-			self.seph.acquire()
-			frame = self.videoBuf.pop()
-			image_tk = Image.open(BytesIO(frame))
-			photo = ImageTk.PhotoImage(image_tk)
-			self.label.configure(image=photo, height=360)
-			self.label.image = photo
-			time.sleep(TIME_ELAPSED)
+			try:
+				# 播放视频
+				self.playEvent.wait()
+				self.seph.acquire()
+				frame = self.videoBuf.pop()
+				image_tk = Image.open(BytesIO(frame))
+				photo = ImageTk.PhotoImage(image_tk)
+				self.label.configure(image=photo, height=360)
+				self.label.image = photo
+				#time.sleep(TIME_ELAPSED)
+			except:
+				print('Error displaying video stream')
+
+	def updateAudio(self):
+		while self.videoBuf.len() < 20:
+			pass
+		while True:
+			try:
+				# 播放音频
+				self.playEvent.wait()
+				self.aseph.acquire()
+				clip = self.audioBuf.pop()
+				self.audioStream.write(clip)
+				time.sleep(TIME_ELAPSED)
+			except:
+				print('Error displaying audio stream')
 
 	def connectToServer(self):
 		"""Connect to the Server. Start a new RTSP/TCP session."""
@@ -241,6 +284,7 @@ class Client:
 						self.openRtpPort()
 						self.playEvent = threading.Event()
 						self.seph = threading.Semaphore(0)
+						self.aseph = threading.Semaphore(0)
 					elif self.requestSent == self.PLAY:
 						self.state = self.PLAYING
 					elif self.requestSent == self.PAUSE:

@@ -7,9 +7,9 @@ from math import ceil
 from moviepy.editor import AudioFileClip
 
 BUF_SIZE = 1
-VIDEO_FPS = 30
+VIDEO_FPS = 29.7
 AUDIO_FPS = 48000
-APV = AUDIO_FPS // VIDEO_FPS
+APV = int(AUDIO_FPS / VIDEO_FPS)
 
 class MediaStream:
     def __init__(self, filename, seph1, seph2, event, buf_size=BUF_SIZE):
@@ -17,6 +17,7 @@ class MediaStream:
         self.filename = filename
         self.buf_size = buf_size
         self.cap = cv2.VideoCapture(self.filename)
+        print(self.cap.get(5))
         self.frameseq = 0
         self.seph1 = seph1
         self.seph2 = seph2
@@ -75,7 +76,7 @@ class MediaStream:
 
 class AudioStream:
     def __init__(self, filename, seph1, seph2, event, buf_size=BUF_SIZE):
-        self.max_frame = 1000
+        self.max_frame = 64000
         self.filename = filename
         self.buf_size = buf_size
         self.clip = AudioFileClip(self.filename).iter_frames()
@@ -84,7 +85,7 @@ class AudioStream:
         self.seph2 = seph2
         self.event = event
         self.buf = Queue(self.buf_size)
-        self.bytesbuf = b''
+        self.arrbuf = np.zeros((APV, 2), dtype=np.float32)
         self.yield_thread = None
 
 
@@ -116,12 +117,13 @@ class AudioStream:
         for (i, frame) in enumerate(self.clip):
             self.event.wait()
             if not self.buf.isFull():
-                self.bytesbuf = self.bytesbuf + np.array(frame).tobytes()
-                if (i + 1) % 1600 == 0:
+                self.arrbuf[i % APV][0] = frame[0]
+                self.arrbuf[i % APV][1] = frame[1]
+                if (i + 1) % APV == 0:
                     self.seph2.acquire()
                     self.frameseq += 1
-                    slice = self.packRTP(self.bytesbuf, self.frameseq, True)
+                    slice = self.arrbuf.tobytes()
+                    slice = self.packRTP(slice, self.frameseq, True)
                     self.buf.push(slice)
                     self.seph1.release()
-                    self.bytesbuf = b''
 

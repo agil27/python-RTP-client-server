@@ -69,7 +69,7 @@ class RtpPacket:
 
 	def getType(self):
 		media_type = int(self.header[1] & 127)
-		if type == 26:
+		if media_type == 26:
 			return 'video'
-		else:
+		elif media_type == 97:
 			return 'audio'
