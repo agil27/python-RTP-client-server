@@ -1,13 +1,17 @@
 from tkinter import *
 import tkinter.messagebox as tkMessageBox
 from PIL import Image, ImageTk
-import socket, threading, sys, traceback, os
-
+import socket, threading
+from io import BytesIO
 from RtpPacket import RtpPacket
+import time
+from utils import LinkList
 
 CACHE_FILE_NAME = "cache-"
 CACHE_FILE_EXT = ".jpg"
 MAX_UDP = 65535
+TIME_ELAPSED = 0.033
+MAX_FRAMES = 25
 
 class Client:
 	INIT = 0
@@ -35,7 +39,12 @@ class Client:
 		self.teardownAcked = 0
 		self.connectToServer()
 		self.frameNbr = 0
-		
+		self.frameBuf = b''
+		self.videoBuf = LinkList()
+		self.audioBuf = LinkList()
+		self.play_thread = None
+		self.update_thread = None
+
 	def createWidgets(self):
 		"""Build GUI."""
 		# Create Setup button
@@ -70,71 +79,75 @@ class Client:
 		"""Setup button handler."""
 		if self.state == self.INIT:
 			self.sendRtspRequest(self.SETUP)
-	
+
 	def exitClient(self):
 		"""Teardown button handler."""
 		self.sendRtspRequest(self.TEARDOWN)		
 		self.master.destroy() # Close the gui window
-		os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
+		#os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
 
 	def pauseMovie(self):
 		"""Pause button handler."""
 		if self.state == self.PLAYING:
 			self.sendRtspRequest(self.PAUSE)
-	
+
 	def playMovie(self):
 		"""Play button handler."""
 		if self.state == self.READY:
-			# Create a new thread to listen for RTP packets
-			threading.Thread(target=self.listenRtp).start()
-			self.playEvent = threading.Event()
-			self.playEvent.clear()
+			self.playEvent.set()
 			self.sendRtspRequest(self.PLAY)
-	
+			if self.play_thread is None:
+				self.play_thread = threading.Thread(target=self.listenRtp)
+				self.play_thread.setDaemon(True)
+				self.play_thread.start()
+			if self.update_thread is None:
+				self.update_thread = threading.Thread(target=self.updateMovie)
+				self.update_thread.setDaemon(True)
+				self.update_thread.start()
+
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
 		print('\nListening...')
 		while True:
+			self.playEvent.wait()
 			try:
 				data = self.rtpSocket.recv(MAX_UDP)
 				if data:
 					rtpPacket = RtpPacket()
 					rtpPacket.decode(data)
-
 					currFrameNbr = rtpPacket.seqNum()
-					#print("Current Seq Num: " + str(currFrameNbr))
-										
-					if currFrameNbr > self.frameNbr: # Discard the late packet
+					marker = rtpPacket.getMarker()
+
+					if currFrameNbr > self.frameNbr:  # Discard the late packet
 						self.frameNbr = currFrameNbr
-						self.updateMovie(self.writeFrame(rtpPacket.getPayload()))
+						payload = rtpPacket.getPayload()
+						self.restoreFrame(payload, marker)
 			except:
-				# Stop listening upon requesting PAUSE or TEARDOWN
-				if self.playEvent.isSet(): 
-					break
-				
-				# Upon receiving ACK for TEARDOWN request,
-				# close the RTP socket
 				if self.teardownAcked == 1:
 					self.rtpSocket.shutdown(socket.SHUT_RDWR)
 					self.rtpSocket.close()
 					break
-					
-	def writeFrame(self, data):
-		"""Write the received frame to a temp image file. Return the image file."""
-		cachename = CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT
-		file = open(cachename, "wb")
-		file.write(data)
-		file.close()
-		
-		return cachename
-	
-	def updateMovie(self, imageFile):
-		"""Update the image file as video frame in the GUI."""
-		image_tk = Image.open(imageFile)
-		photo = ImageTk.PhotoImage(image_tk)
-		self.label.configure(image = photo, height=480)
-		self.label.image = photo
-		
+
+	def restoreFrame(self, payload, marker):
+		self.frameBuf += payload
+		if marker:
+			self.videoBuf.push(self.frameBuf)
+			self.seph.release()
+			self.frameBuf = b''
+
+	def updateMovie(self):
+		while self.videoBuf.len() < 20:
+			pass
+		while True:
+			self.playEvent.wait()
+			self.seph.acquire()
+			frame = self.videoBuf.pop()
+			image_tk = Image.open(BytesIO(frame))
+			photo = ImageTk.PhotoImage(image_tk)
+			self.label.configure(image=photo, height=360)
+			self.label.image = photo
+			time.sleep(TIME_ELAPSED)
+
 	def connectToServer(self):
 		"""Connect to the Server. Start a new RTSP/TCP session."""
 		self.rtspSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -226,17 +239,18 @@ class Client:
 						self.state = self.READY
 						# Open RTP port.
 						self.openRtpPort()
+						self.playEvent = threading.Event()
+						self.seph = threading.Semaphore(0)
 					elif self.requestSent == self.PLAY:
 						self.state = self.PLAYING
 					elif self.requestSent == self.PAUSE:
 						self.state = self.READY
-						# The play thread exits. A new thread is created on resume.
-						self.playEvent.set()
+						self.playEvent.clear()
 					elif self.requestSent == self.TEARDOWN:
 						self.state = self.INIT
 						# Flag the teardownAcked to close the socket.
-						self.teardownAcked = 1 
-	
+						self.teardownAcked = 1
+
 	def openRtpPort(self):
 		"""Open RTP socket binded to a specified port."""
 		# Create a new datagram socket to receive RTP packets from the server

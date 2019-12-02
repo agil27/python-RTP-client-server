@@ -63,3 +63,13 @@ class RtpPacket:
 	def getPacket(self):
 		"""Return RTP packet."""
 		return self.header + self.payload
+
+	def getMarker(self):
+		return (self.header[1] & (1 << 7)) != 0
+
+	def getType(self):
+		media_type = int(self.header[1] & 127)
+		if type == 26:
+			return 'video'
+		else:
+			return 'audio'
