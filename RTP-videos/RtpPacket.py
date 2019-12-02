@@ -1,6 +1,6 @@
-import sys
 from time import time
 HEADER_SIZE = 12
+from Constants import *
 
 class RtpPacket:
 	header = bytearray(HEADER_SIZE)
@@ -70,6 +70,6 @@ class RtpPacket:
 	def getType(self):
 		media_type = int(self.header[1] & 127)
 		if media_type == 26:
-			return 'video'
+			return VIDEO
 		elif media_type == 97:
-			return 'audio'
+			return AUDIO

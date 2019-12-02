@@ -1,6 +1,5 @@
-from Client import *
 from tkinter import Tk
+from ClientController import ClientController as cc
 
-window = Tk()
-client = Client(window, '127.0.0.1', 8554, 32254, 'rtp://127.0.0.1:8554')
-window.mainloop()
+mycc = cc('127.0.0.1', 8554, 32254, 'rtp://127.0.0.1:8554')
+mycc.run()
