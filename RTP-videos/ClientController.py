@@ -114,7 +114,7 @@ class ClientController:
                 self.client_ui.updateMovie(self.retrieveFrame(mediatype=VIDEO))
                 #time.sleep(TIME_ELAPSED)
                 # self.synchronize_semaphore.release()
-                self.event.wait(TIME_ELAPSED)
+                self.video_control_event.wait(TIME_ELAPSED)
                 # self.audio_consume_semaphore.acquire()
                 # self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
             except:
@@ -123,6 +123,7 @@ class ClientController:
     def playAudio(self):
         while self.video_buffer.len() < 20:
             pass
+        self.audio_control_event.wait(1.75)
         while True:
             try:
                 self.event.wait()
@@ -219,6 +220,8 @@ class ClientController:
         self.state = READY
         self.openRtpPort()
         self.event = threading.Event()
+        self.video_control_event = threading.Event()
+        self.audio_control_event = threading.Event()
         self.video_consume_semaphore = threading.Semaphore(0)
         self.audio_consume_semaphore = threading.Semaphore(0)
         self.synchronize_semaphore = threading.Semaphore(0)
