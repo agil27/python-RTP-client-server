@@ -3,13 +3,13 @@ import tkinter.messagebox as tkMessageBox
 from PIL import Image, ImageTk
 from io import BytesIO
 
+
 class ClientUI:
     def __init__(self, master, eventhandlers):
         self.master = master
         self.master.protocol("WM_DELETE_WINDOW", self.handler)
         self.event_handlers = eventhandlers
         self.createWidgets()
-
 
     def createWidgets(self):
         """Build GUI."""
@@ -43,23 +43,27 @@ class ClientUI:
 
         self.slider = Scale(self.master, orient=HORIZONTAL, from_=0, to=1000, length=500)
         self.slider.grid(row=1, column=0, columnspan=50)
+        self.slider.bind('<Button-1>', self.repositionStart)
+        self.slider.bind('<ButtonRelease-1>', self.repositionEnd)
 
     def setupMovie(self):
         self.event_handlers['setup']()
-
 
     def exitClient(self):
         self.event_handlers['teardown']()
         self.master.destroy()  # Close the gui window
 
-
     def pauseMovie(self):
         self.event_handlers['pause']()
-
 
     def playMovie(self):
         self.event_handlers['play']()
 
+    def repositionStart(self, pos):
+        self.event_handlers['pause']()
+
+    def repositionEnd(self, pos):
+        self.event_handlers['play']()
 
     def updateMovie(self, frame):
         image_tk = Image.open(BytesIO(frame))
@@ -67,11 +71,9 @@ class ClientUI:
         self.label.configure(image=photo, height=270)
         self.label.image = photo
 
-
     def handler(self):
         self.pauseMovie()
         if tkMessageBox.askokcancel("退出?", "你确认要退出吗"):
             self.exitClient()
         else:
             self.playMovie()
-

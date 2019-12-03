@@ -39,15 +39,14 @@ class ClientController:
         self.event = None
         self.video_consume_semaphore = None
         self.audio_consume_semaphore = None
+        self.synchronize_semaphore = None
 
         self.window = Tk()
-
 
     def run(self):
         self.connect()
         self.createUI()
         self.window.mainloop()
-
 
     def createUI(self):
         event_handlers = {
@@ -58,7 +57,6 @@ class ClientController:
         }
         self.client_ui = ClientUI(self.window, event_handlers)
 
-
     def connect(self):
         self.rtsp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print(self.rtsp_socket, self.server_addr, self.server_port)
@@ -66,7 +64,6 @@ class ClientController:
             self.rtsp_socket.connect((self.server_addr, self.server_port))
         except:
             raise ConnectionError
-
 
     def setup(self):
         if self.state == INIT:
@@ -80,22 +77,18 @@ class ClientController:
         )
         self.audio_stream.start()
 
-
     def teardown(self):
         self.sendTeardown()
-
 
     def pause(self):
         if self.state == PLAYING:
             self.sendPause()
-
 
     def play(self):
         if self.state == READY:
             self.event.set()
             self.createThreads()
             self.sendPlay()
-
 
     def createThreads(self):
         if self.audio_thread is None:
@@ -111,7 +104,6 @@ class ClientController:
             self.listen_thread.setDaemon(True)
             self.listen_thread.start()
 
-
     def playVideo(self):
         while self.video_buffer.len() < 20:
             pass
@@ -121,11 +113,12 @@ class ClientController:
                 self.video_consume_semaphore.acquire()
                 self.client_ui.updateMovie(self.retrieveFrame(mediatype=VIDEO))
                 #time.sleep(TIME_ELAPSED)
-                #self.audio_consume_semaphore.acquire()
-                #self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
+                # self.synchronize_semaphore.release()
+                self.event.wait(TIME_ELAPSED)
+                # self.audio_consume_semaphore.acquire()
+                # self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
             except:
                 continue
-
 
     def playAudio(self):
         while self.video_buffer.len() < 20:
@@ -133,12 +126,12 @@ class ClientController:
         while True:
             try:
                 self.event.wait()
+                # self.synchronize_semaphore.acquire()
                 self.audio_consume_semaphore.acquire()
                 self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
-                #time.sleep(TIME_ELAPSED)
+                # time.sleep(TIME_ELAPSED)
             except:
                 continue
-
 
     def listenForRtp(self):
         print('\nListening...')
@@ -160,7 +153,6 @@ class ClientController:
                 self.rtp_socket.close()
                 break
 
-
     def receiveIncomingPacket(self, packet, seq, marker, media_type):
         if media_type == VIDEO:
             if seq > self.video_frame_seq:
@@ -173,7 +165,6 @@ class ClientController:
                 payload = packet.getPayload()
                 self.restoreFrame(payload, marker, AUDIO)
 
-
     def restoreFrame(self, payload, marker, mediatype):
         if mediatype == VIDEO:
             self.frame_buffer += payload
@@ -185,13 +176,11 @@ class ClientController:
             self.audio_buffer.push(payload)
             self.audio_consume_semaphore.release()
 
-
     def retrieveFrame(self, mediatype):
         if mediatype == VIDEO:
             return self.video_buffer.pop()
         if mediatype == AUDIO:
-           return self.audio_buffer.pop()
-
+            return self.audio_buffer.pop()
 
     def receiveResponse(self):
         while True:
@@ -202,7 +191,6 @@ class ClientController:
                 self.rtsp_socket.shutdown(socket.SHUT_RDWR)
                 self.rtsp_socket.close()
                 break
-
 
     def parseResponse(self, data):
         try:
@@ -227,28 +215,24 @@ class ClientController:
                     if self.request_sent == TEARDOWN:
                         self.handleTeardown()
 
-
     def handleSetup(self):
         self.state = READY
         self.openRtpPort()
         self.event = threading.Event()
         self.video_consume_semaphore = threading.Semaphore(0)
         self.audio_consume_semaphore = threading.Semaphore(0)
-
+        self.synchronize_semaphore = threading.Semaphore(0)
 
     def handlePlay(self):
         self.state = PLAYING
-
 
     def handlePause(self):
         self.state = READY
         self.event.clear()
 
-
     def handleTeardown(self):
         self.state = INIT
         self.teardown_acked = True
-
 
     def sendSetup(self):
         if self.state == INIT:
@@ -260,14 +244,12 @@ class ClientController:
             my_sender.sendSetup()
             self.request_sent = SETUP
 
-
     def sendPlay(self):
         if self.state == READY:
             self.rtsp_seq += 1
             my_sender = RequestSender(self.rtsp_socket, self.filename, self.rtp_port, self.rtsp_seq, self.session_id)
             my_sender.sendPlay()
             self.request_sent = PLAY
-
 
     def sendPause(self):
         if self.state == PLAYING:
@@ -276,14 +258,12 @@ class ClientController:
             my_sender.sendPause()
             self.request_sent = PAUSE
 
-
     def sendTeardown(self):
         if self.state != INIT:
             self.rtsp_seq += 1
             my_sender = RequestSender(self.rtsp_socket, self.filename, self.rtp_port, self.rtsp_seq, self.session_id)
             my_sender.sendTeardown()
             self.request_sent = TEARDOWN
-
 
     def openRtpPort(self):
         self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

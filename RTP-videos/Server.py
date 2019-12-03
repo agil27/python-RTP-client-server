@@ -33,6 +33,7 @@ class ServerWorker:
         self.video_consume_semaphore = None
         self.audio_yield_semaphore = None
         self.audio_consume_semaphore = None
+        self.synchronize_semaphore = None
 
         self.rtp_socket = None
         self.video_stream = None
@@ -48,13 +49,18 @@ class ServerWorker:
             if frame is not None:
                 self.rtp_socket.sendto(frame, (self.client_addr, self.client_rtp_port))
                 self.video_yield_semaphore.release()
+                self.synchronize_semaphore.release()
+                #self.event.wait(TIME_ELAPSED)
             else:
                 break
 
     def playAudio(self):
         while True:
+            #self.event.wait(TIME_ELAPSED)
             self.event.wait()
             self.audio_consume_semaphore.acquire()
+            for i in range(4):
+                self.synchronize_semaphore.acquire()
             frame = self.audio_stream.nextFrame()
             if frame is not None:
                 self.rtp_socket.sendto(frame, (self.client_addr, self.client_rtp_port))
@@ -81,6 +87,7 @@ class ServerWorker:
             self.video_consume_semaphore = threading.Semaphore(0)
             self.audio_yield_semaphore = threading.Semaphore(1)
             self.audio_consume_semaphore = threading.Semaphore(0)
+            self.synchronize_semaphore = threading.Semaphore(0)
             self.event = threading.Event()
             self.video_stream = VideoStream(self.media, self.video_consume_semaphore, self.video_yield_semaphore, self.event)
             self.audio_stream = AudioStream(self.media, self.audio_consume_semaphore, self.audio_yield_semaphore, self.event)

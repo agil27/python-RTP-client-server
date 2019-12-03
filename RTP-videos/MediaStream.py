@@ -9,7 +9,7 @@ from moviepy.editor import AudioFileClip
 
 VIDEO_FPS = 29.7
 AUDIO_FPS = 48000
-APV = int(AUDIO_FPS / VIDEO_FPS)
+APV = 4 * int(AUDIO_FPS / VIDEO_FPS)
 
 
 class VideoStream:
