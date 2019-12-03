@@ -5,9 +5,10 @@ from utils import LinkList
 import sounddevice as sd
 from Exception import *
 from Constants import *
-from RTSPTool import ResponseParser, RequestSender
+from RtspTools import ResponseParser, RequestSender
 from ClientUI import ClientUI
 from tkinter import Tk
+
 
 class ClientController:
     def __init__(self, serveraddr, serverport, rtpport, filename):
@@ -97,10 +98,12 @@ class ClientController:
 
 
     def createThreads(self):
+        '''
         if self.audio_thread is None:
             self.audio_thread = threading.Thread(target=self.playAudio)
             self.audio_thread.setDaemon(True)
             self.audio_thread.start()
+        '''
         if self.video_thread is None:
             self.video_thread = threading.Thread(target=self.playVideo)
             self.video_thread.setDaemon(True)
@@ -118,6 +121,9 @@ class ClientController:
             self.event.wait()
             self.video_consume_semaphore.acquire()
             self.client_ui.updateMovie(self.retrieveFrame(mediatype=VIDEO))
+            time.sleep(TIME_ELAPSED)
+            self.audio_consume_semaphore.acquire()
+            self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
 
 
     def playAudio(self):
@@ -195,7 +201,10 @@ class ClientController:
 
 
     def parseResponse(self, data):
-        my_parser = ResponseParser(data, self.request_sent)
+        try:
+            my_parser = ResponseParser(data, self.request_sent)
+        except:
+            return
         current_seq = my_parser.getSeq()
         if current_seq == self.rtsp_seq:
             session_id = my_parser.getSessionId()

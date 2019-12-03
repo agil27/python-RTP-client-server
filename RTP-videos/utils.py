@@ -1,3 +1,6 @@
+import random
+from Constants import *
+
 class Queue:
     def __init__(self, capacity):
         self.capacity = capacity

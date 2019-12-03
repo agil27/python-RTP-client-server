@@ -1,222 +1,185 @@
 import socket
 import threading
-import re
-from MediaStream import MediaStream, AudioStream
+from MediaStream import VideoStream, AudioStream
+from Constants import *
+import random
+from RtspTools import ResponseSender, RequestParser
+from Exception import *
 
 
-MAX_BUF_LEN = 1024
-SERVER_PORT = 8554
-SERVER_RTP_PORT = 55532
-SERVER_RTCP_PORT = 55533
-FILENAME = 'videos/eve.mp4'
-TIME_ELAPSED = 0.033
-BUF_SIZE = 1
-
-
-class RTPCon:
-    '''
-    处理单个客户类端连接的类
-    '''
-
-
-    def __init__(self, con, addr, filename=FILENAME, buf_size=BUF_SIZE):
-        '''
-        :param con: 通信套接字
-        :param addr: 客户端地址
-        '''
+class ServerWorker:
+    '''处理单个客户端连接'''
+    def __init__(self, rtsp_socket, client_addr, filename=DEFAULT_FILENAME):
         self.server_rtp_port = SERVER_RTP_PORT
         self.server_rtcp_port = SERVER_RTCP_PORT
-        self.con = con
-        self.addr = addr
+        self.rtsp_socket = rtsp_socket
+        self.client_addr = client_addr[0]
+        self.media = filename
+
         self.client_rtcp_port = 0
         self.client_rtp_port = 0
-        self.local_ip = con.getsockname()[0]
-        self.session_id = 66334873
-        self.media = filename
-        self.rtp_socket = None
+        self.local_ip = self.rtsp_socket.getsockname()[0]
+        self.session_id = self.generateRandomSessionId()
+        self.cseq = 0
+        self.url = None
+
         self.event = None
-        self.buf_size = buf_size
-        self.state = 'READY'
-        self.client_thread = None
-        self.play_thread = None
+        self.state = INIT
+        self.listen_thread = None
+        self.video_thread = None
         self.audio_thread = None
 
+        self.video_yield_semaphore = None
+        self.video_consume_semaphore = None
+        self.audio_yield_semaphore = None
+        self.audio_consume_semaphore = None
 
-    def play(self):
+        self.rtp_socket = None
+        self.video_stream = None
+        self.audio_stream = None
+
+        self.client_teardown = False
+
+    def playVideo(self):
         while True:
             self.event.wait()
-            self.seph1.acquire()
-            frame = self.stream.nextFrame()
+            self.video_consume_semaphore.acquire()
+            frame = self.video_stream.nextFrame()
             if frame is not None:
-                self.rtp_socket.sendto(frame, (self.addr[0], self.client_rtp_port))
-                #time.sleep(TIME_ELAPSED)
-                self.seph2.release()
+                self.rtp_socket.sendto(frame, (self.client_addr, self.client_rtp_port))
+                self.video_yield_semaphore.release()
             else:
                 break
 
-
-    def audioPlay(self):
+    def playAudio(self):
         while True:
             self.event.wait()
-            self.aseph1.acquire()
-            frame = self.astream.nextFrame()
+            self.audio_consume_semaphore.acquire()
+            frame = self.audio_stream.nextFrame()
             if frame is not None:
-                self.rtp_socket.sendto(frame, (self.addr[0], self.client_rtp_port))
-                #time.sleep(TIME_ELAPSED)
-                self.aseph2.release()
+                self.rtp_socket.sendto(frame, (self.client_addr, self.client_rtp_port))
+                self.audio_yield_semaphore.release()
             else:
                 break
 
+    def createThreads(self):
+        if self.video_thread is None:
+            self.video_thread = threading.Thread(target=self.playVideo)
+            self.video_thread.setDaemon(True)
+            self.video_thread.start()
+        if self.audio_thread is None:
+            self.audio_thread = threading.Thread(target=self.playAudio)
+            self.audio_thread.setDaemon(True)
+            self.audio_thread.start()
 
-    def handleOptions(self, cseq):
-        resp = 'RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: OPTIONS, DESCRIBE, SETUP, PLAY\r\n\r\n' % cseq
-        self.con.send(resp.encode('utf-8'))
-
-    '''
-    def handleDescribe(self, cseq, url):
-        sdp = 'v=0\r\n' \
-            'o=- 9%d 1 IN IP4 %s\r\n' \
-            'o=- 9%ld 1 IN IP4 %s\r\n' \
-            't=0 0\r\n' \
-            'a=control:*\r\n' \
-            'm=video 0 RTP/AVP 96\r\n' \
-            'a=rtpmap:96 H264/90000\r\n' \
-            'a=control:track0\r\n' % (time.time(), self.local_ip)
-        resp = 'RTSP/1.0 200 OK\r\n' \
-            'CSeq: %d\r\n' \
-            'Content-Base: %s\r\n' \
-            'Content-type: application/sdp\r\n' \
-            'Content-length: %d\r\n\r\n' \
-            '%s' % (cseq, url, len(sdp), sdp)
-        self.con.send(resp.encode('utf-8'))
-    '''
-
-    def handleSetup(self, cseq):
-        resp = 'RTSP/1.0 200 OK\r\n' \
-            'CSeq: %d\r\n' \
-            'Transport: RTP/AVP;unicast;client_port=%d-%d;server_port=%d-%d\r\n' \
-            'Session: %d\r\n' \
-            '\r\n' % (cseq, self.client_rtp_port, self.client_rtcp_port, self.server_rtp_port, self.server_rtcp_port, self.session_id)
-        self.con.send(resp.encode('utf-8'))
-        if self.state == 'READY':
-            self.state = 'SETUP'
+    def handleSetup(self):
+        self.sender.sendSetup()
+        if self.state == INIT:
+            self.state = READY
             self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.seph1 = threading.Semaphore(0)
-            self.seph2 = threading.Semaphore(self.buf_size)
-            self.aseph1 = threading.Semaphore(0)
-            self.aseph2 = threading.Semaphore(self.buf_size)
+            self.video_yield_semaphore = threading.Semaphore(1)
+            self.video_consume_semaphore = threading.Semaphore(0)
+            self.audio_yield_semaphore = threading.Semaphore(1)
+            self.audio_consume_semaphore = threading.Semaphore(0)
             self.event = threading.Event()
-            self.stream = MediaStream(self.media, self.seph1, self.seph2, self.event, self.buf_size)
-            self.astream = AudioStream(self.media, self.aseph1, self.aseph2, self.event, self.buf_size)
+            self.video_stream = VideoStream(self.media, self.video_consume_semaphore, self.video_yield_semaphore, self.event)
+            self.audio_stream = AudioStream(self.media, self.audio_consume_semaphore, self.audio_yield_semaphore, self.event)
 
-
-    def handlePlay(self, cseq):
-        resp = 'RTSP/1.0 200 OK\r\n' \
-            'CSeq: %d\r\n' \
-            'Range: npt=0.000-\r\n' \
-            'Session: %d; timeout=60\r\n\r\n' % (cseq, self.session_id)
-        self.con.send(resp.encode('utf-8'))
-        if self.state == 'SETUP' or 'PAUSE':
-            self.state = 'PLAY'
+    def handlePlay(self):
+        self.sender.sendPlay()
+        if self.state == READY:
+            self.state = PLAYING
+            self.createThreads()
             self.event.set()
-            self.stream.yieldFrame()
-            self.astream.yieldFrame()
-            if self.play_thread is None:
-                self.play_thread = threading.Thread(target=self.play)
-                self.play_thread.setDaemon(True)
-                self.play_thread.start()
-            if self.audio_thread is None:
-                self.audio_thread = threading.Thread(target=self.audioPlay)
-                self.audio_thread.setDaemon(True)
-                self.audio_thread.start()
+            self.video_stream.yieldFrame()
+            self.audio_stream.yieldFrame()
+
+    def handlePause(self):
+        self.sender.sendPause()
+        if self.state == PLAYING:
+            self.state = READY
+            self.event.clear()
 
 
-    def handlePause(self, cseq):
-        print('\nPaused...')
+    def handleTeardown(self):
+        self.sender.sendTeardown()
         self.event.clear()
-        resp = 'RTSP/1.0 200 OK\r\nCSeq: %d\r\nSession: %d\r\n\r\n' % (cseq, self.session_id)
-        self.con.send(resp.encode('utf-8'))
+        self.state = INIT
+        self.client_teardown = True
 
+    def handleRtspRequest(self, request):
+        my_parser = RequestParser(request)
+        method = my_parser.getMethod()
+        self.url = my_parser.getUrl()
+        self.cseq = my_parser.getCseq()
+        if method == SETUP:
+            self.client_rtp_port, self.client_rtcp_port = my_parser.getClientPorts()
 
-    def handleTeardown(self, cseq):
-        resp = 'RTSP/1.0 200 OK\r\nCSeq: %d\r\nSession: %d\r\n\r\n' % (cseq, self.session_id)
-        self.event.clear()
-        self.con.send(resp.encode('utf-8'))
-        self.state = 'READY'
+        self.sender = ResponseSender(
+            self.rtsp_socket, self.cseq, self.session_id,
+            self.url, self.local_ip,
+            self.client_rtp_port, self.client_rtcp_port,
+            self.server_rtp_port, self.server_rtcp_port,
+        )
 
+        if method == SETUP:
+            self.handleSetup()
+        if method == PLAY:
+            self.handlePlay()
+        if method == TEARDOWN:
+            self.handleTeardown()
+        if method == PAUSE:
+            self.handlePause()
 
-    def parseRTSPCommand(self, cmd):
-        print('Received: ', cmd)
-        lines = cmd.split('\n')
-        match = lines[0].split(' ')
-        method, url, version = match[0], match[1], match[2]
-        cseq = int(lines[1][5:])
-        if method == 'SETUP':
-            match = re.search(r'client_port\s*=\s*(\d+)-(\d+)', lines[2]).groups()
-            self.client_rtp_port, self.client_rtcp_port = int(match[0]), int(match[1])
-            self.handleSetup(cseq)
-        if method == 'OPTIONS':
-            self.handleOptions(cseq)
-        #if method == 'DESCRIBE':
-        #    self.handleDescribe(cseq, url)
-        if method == 'PLAY':
-            self.handlePlay(cseq)
-        if method == 'TEARDOWN':
-            self.handleTeardown(cseq)
-        if method == 'PAUSE':
-            self.handlePause(cseq)
+    def generateRandomSessionId(self):
+        return random.randint(MIN_SESSION, MAX_SESSION)
 
-
-    def process(self):
+    def listen(self):
         while True:
-            data = self.con.recv(MAX_BUF_LEN)
-            if data:
-                data = data.decode('utf-8')
-                self.parseRTSPCommand(data)
-            else:
-                break
-        self.con.close()
-
+            try:
+                data = self.rtsp_socket.recv(MAX_RTSP_BANDWIDTH)
+                if data:
+                    self.handleRtspRequest(data.decode('utf-8'))
+                else:
+                    break
+            except:
+                if self.client_teardown:
+                    break
+        self.rtsp_socket.close()
 
     def run(self):
-        '''
-        :param con: 传输信道
-        :param addr: ip地址
-        :return: None
-        处理一个客户端的连接
-        '''
-        self.client_thread = threading.Thread(target=self.process)
-        self.client_thread.setDaemon(True)
-        self.client_thread.start()
+        self.listen_thread = threading.Thread(target=self.listen)
+        self.listen_thread.setDaemon(True)
+        self.listen_thread.start()
 
 
-class RTPServer:
-    def __init__(self, port=SERVER_PORT):
+class Server:
+    def __init__(self, port=SERVER_RTSP_PORT):
         self.port = port
-        self.rtsp_sock = None
+        self.listen_socket = None
 
-
-    def run(self, max_con=5):
-        '''
-        :param max_con: 最大连接数量
-        :return: None
-        建立监听，如果有客户端连接那么开新线程处理
-        '''
-        self.rtsp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.rtsp_sock.bind(('0.0.0.0', self.port))
-        self.rtsp_sock.listen(max_con)
+    def run(self, max_connections = MAX_CONNECTIONS):
+        self.listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listen_socket.bind(('0.0.0.0', self.port))
+        self.listen_socket.listen(max_connections)
 
         while True:
-            con, addr = self.rtsp_sock.accept()
-            new_con = RTPCon(con, addr)
-            # self.client_cons.push(new_con)
-            new_con.run()
+            try:
+                rtsp_socket, client_addr = self.listen_socket.accept()
+                new_worker = ServerWorker(rtsp_socket, client_addr)
+                new_worker.run()
+            except:
+                raise SocketError
 
 
 def main():
-    my_server = RTPServer()
+    my_server = Server()
     my_server.run()
 
 
 if __name__ == '__main__':
     main()
+
+
+
+
