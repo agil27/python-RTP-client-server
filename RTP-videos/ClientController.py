@@ -98,12 +98,10 @@ class ClientController:
 
 
     def createThreads(self):
-        '''
         if self.audio_thread is None:
             self.audio_thread = threading.Thread(target=self.playAudio)
             self.audio_thread.setDaemon(True)
             self.audio_thread.start()
-        '''
         if self.video_thread is None:
             self.video_thread = threading.Thread(target=self.playVideo)
             self.video_thread.setDaemon(True)
@@ -118,22 +116,28 @@ class ClientController:
         while self.video_buffer.len() < 20:
             pass
         while True:
-            self.event.wait()
-            self.video_consume_semaphore.acquire()
-            self.client_ui.updateMovie(self.retrieveFrame(mediatype=VIDEO))
-            time.sleep(TIME_ELAPSED)
-            self.audio_consume_semaphore.acquire()
-            self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
+            try:
+                self.event.wait()
+                self.video_consume_semaphore.acquire()
+                self.client_ui.updateMovie(self.retrieveFrame(mediatype=VIDEO))
+                #time.sleep(TIME_ELAPSED)
+                #self.audio_consume_semaphore.acquire()
+                #self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
+            except:
+                continue
 
 
     def playAudio(self):
         while self.video_buffer.len() < 20:
             pass
         while True:
-            self.event.wait()
-            self.audio_consume_semaphore.acquire()
-            self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
-            time.sleep(TIME_ELAPSED)
+            try:
+                self.event.wait()
+                self.audio_consume_semaphore.acquire()
+                self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
+                #time.sleep(TIME_ELAPSED)
+            except:
+                continue
 
 
     def listenForRtp(self):

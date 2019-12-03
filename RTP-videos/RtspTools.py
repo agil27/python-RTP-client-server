@@ -76,7 +76,7 @@ class RequestSender():
 
 
     def sendTeardown(self):
-        request = 'PAUSE %s RTSP/1.0\n' \
+        request = 'TEARDOWN %s RTSP/1.0\n' \
             'CSeq: %d\n' \
             'Session: %d' % (self.filename, self.cseq, self.session)
         self.send(request)
