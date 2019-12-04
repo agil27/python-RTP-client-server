@@ -45,6 +45,9 @@ class ClientController:
         self.synchronize_semaphore = None
         self.current_timestamp = 0
 
+        self.step = 1
+        self.changeSpeed = False
+
         self.window = Tk()
 
     def run(self):
@@ -58,7 +61,8 @@ class ClientController:
             'play': self.play,
             'pause': self.pause,
             'teardown': self.teardown,
-            'reposition': self.reposition
+            'reposition': self.reposition,
+            'double': self.double
         }
         self.client_ui = ClientUI(self.window, event_handlers)
 
@@ -132,7 +136,7 @@ class ClientController:
     def playAudio(self):
         while self.video_buffer.len() < 20:
             pass
-        #self.audio_control_event.wait(1.75)
+        # self.audio_control_event.wait(1.75)
         while True:
             try:
                 self.event.wait()
@@ -252,6 +256,9 @@ class ClientController:
     def handlePause(self):
         self.state = READY
         self.event.clear()
+        if self.changeSpeed:
+            self.changeSpeed = False
+            self.play()
 
     def handleTeardown(self):
         self.state = INIT
@@ -280,7 +287,7 @@ class ClientController:
             my_sender = RequestSender(
                 self.rtsp_socket, self.filename,
                 self.rtp_port, self.rtsp_seq,
-                self.session_id)
+                self.session_id, step=self.step)
             my_sender.sendPlay()
             self.request_sent = PLAY
 
@@ -327,7 +334,15 @@ class ClientController:
     def activateSliderUpdate(self):
         if self.state == PLAYING:
             pos = self.current_timestamp * 1000 // self.total_frames
-            print(self.current_timestamp, pos)
             self.client_ui.updateSlider(pos)
             timer = threading.Timer(1, self.activateSliderUpdate)
             timer.start()
+
+    def double(self):
+        if self.step == 1:
+            self.step = 2
+        else:
+            self.step = 1
+        if self.state == PLAYING:
+            self.changeSpeed = True
+            self.sendPause()

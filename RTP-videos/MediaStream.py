@@ -81,6 +81,8 @@ class VideoStream:
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
         self.current_frame = pos
 
+    def setStep(self, step):
+        self.step = step
 
 class AudioStream:
     def __init__(self, filename, consume_semaphore, yield_semaphore, event, step=1):
@@ -137,3 +139,6 @@ class AudioStream:
 
     def setPosition(self, pos):
         self.current_clip = (pos - 2) // 4
+
+    def setStep(self, step):
+        self.step = step

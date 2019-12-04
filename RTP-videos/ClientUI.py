@@ -15,28 +15,33 @@ class ClientUI:
     def createWidgets(self):
         """Build GUI."""
         # Create Setup button
-        self.setup = Button(self.master, width=20, padx=3, pady=3)
+        self.setup = Button(self.master, width=15, padx=3, pady=3)
         self.setup["text"] = "Setup"
         self.setup["command"] = self.setupMovie
         self.setup.grid(row=2, column=0, padx=2, pady=2)
 
         # Create Play button
-        self.start = Button(self.master, width=20, padx=3, pady=3)
+        self.start = Button(self.master, width=15, padx=3, pady=3)
         self.start["text"] = "Play"
         self.start["command"] = self.playMovie
         self.start.grid(row=2, column=1, padx=2, pady=2)
 
         # Create Pause button
-        self.pause = Button(self.master, width=20, padx=3, pady=3)
+        self.pause = Button(self.master, width=15, padx=3, pady=3)
         self.pause["text"] = "Pause"
         self.pause["command"] = self.pauseMovie
         self.pause.grid(row=2, column=2, padx=2, pady=2)
 
         # Create Teardown button
-        self.teardown = Button(self.master, width=20, padx=3, pady=3)
+        self.teardown = Button(self.master, width=15, padx=3, pady=3)
         self.teardown["text"] = "Teardown"
         self.teardown["command"] = self.exitClient
         self.teardown.grid(row=2, column=3, padx=2, pady=2)
+
+        self.double = Button(self.master, width = 15, padx=3, pady=3)
+        self.double["text"] = "2x"
+        self.double["command"] = self.doubleSpeed
+        self.double.grid(row=2, column=4, padx=2, pady=2)
 
         # Create a label to display the movie
         self.label = Label(self.master, height=19)
@@ -64,7 +69,12 @@ class ClientUI:
         self.event_handlers['pause']()
 
     def repositionEnd(self, pos):
-        self.event_handlers['reposition'](int(self.pos.get()))
+        position = int(self.pos.get())
+        if position == 0:
+            position = 1
+        if position == 1000:
+            position = 999
+        self.event_handlers['reposition'](position)
 
     def updateMovie(self, frame):
         image_tk = Image.open(BytesIO(frame))
@@ -81,3 +91,10 @@ class ClientUI:
             self.exitClient()
         else:
             self.playMovie()
+
+    def doubleSpeed(self):
+        if self.double["text"] == '2x':
+            self.double["text"] = '1x'
+        else:
+            self.double["text"] = '2x'
+        self.event_handlers['double']()

@@ -46,13 +46,14 @@ class ResponseParser:
 
 
 class RequestSender():
-    def __init__(self, socket, filename, port, cseq, session, startPosition=0):
+    def __init__(self, socket, filename, port, cseq, session, startPosition=0, step=1):
         self.socket = socket
         self.filename = filename
         self.port = port
         self.cseq = cseq
         self.session = session
         self.start_position = startPosition
+        self.step = step
 
     def send(self, request):
         print('\nSend: ', request)
@@ -68,7 +69,8 @@ class RequestSender():
         request = 'PLAY %s RTSP/1.0\n' \
                   'CSeq: %d\n' \
                   'Session: %d\n' \
-                  'Range: npt=%d-' % (self.filename, self.cseq, self.session, self.start_position)
+                  'Range: npt=%d-\n' \
+                  'Step: %d' % (self.filename, self.cseq, self.session, self.start_position, self.step)
         self.send(request)
 
     def sendPause(self):
@@ -195,6 +197,7 @@ class RequestParser:
             self.client_rtp_port, self.client_rtcp_port = int(match[0]), int(match[1])
         if self.method == PLAY:
             self.start_position = int(lines[3][11:-1])
+            self.step = int(lines[4][6:])
 
     def getMethod(self):
         return self.method
@@ -210,3 +213,6 @@ class RequestParser:
 
     def getStartPosition(self):
         return self.start_position
+
+    def getStep(self):
+        return self.step

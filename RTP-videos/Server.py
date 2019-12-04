@@ -95,6 +95,8 @@ class ServerWorker:
                 self.event.clear()
                 self.video_stream.setPosition(self.start_position)
                 self.audio_stream.setPosition(self.start_position)
+            self.video_stream.setStep(self.step)
+            self.audio_stream.setStep(self.step)
             self.event.set()
             self.video_stream.yieldFrame()
             self.audio_stream.yieldFrame()
@@ -127,7 +129,9 @@ class ServerWorker:
         method = my_parser.getMethod()
         self.url = my_parser.getUrl()
         self.cseq = my_parser.getCseq()
-        self.start_position = my_parser.getStartPosition()
+        if method == PLAY:
+            self.start_position = my_parser.getStartPosition()
+            self.step = my_parser.getStep()
         if method == SETUP:
             self.client_rtp_port, self.client_rtcp_port = my_parser.getClientPorts()
         self.sender = ResponseSender(
