@@ -29,11 +29,11 @@ class VideoStream:
         self.yield_thread = None
 
     def packRTP(self, payload, seq, current_frame, isLast):
-        V, P, X, CC, PT, seqNum, M, SSRC = 2, 0, 0, 0, 26, seq, current_frame, 0
+        V, P, X, CC, PT, seqNum, M, SSRC, timestamp = 2, 0, 0, 0, 26, seq, 0, 0, current_frame
         if isLast:
             M = 1
         rtpPacket = RtpPacket()
-        rtpPacket.encode(V, P, X, CC, seqNum, M, PT, SSRC, payload)
+        rtpPacket.encode(V, P, X, CC, seqNum, M, PT, SSRC, payload, current_frame)
         return rtpPacket.getPacket()
 
     def yieldFrame(self):
@@ -99,11 +99,11 @@ class AudioStream:
         self.yield_thread = None
 
     def packRTP(self, payload, seq, isLast):
-        V, P, X, CC, PT, seqNum, M, SSRC = 2, 0, 0, 0, 97, seq, 0, 0
+        V, P, X, CC, PT, seqNum, M, SSRC, timestamp = 2, 0, 0, 0, 97, seq, 0, 0, 0
         if isLast:
             M = 1
         rtpPacket = RtpPacket()
-        rtpPacket.encode(V, P, X, CC, seqNum, M, PT, SSRC, payload)
+        rtpPacket.encode(V, P, X, CC, seqNum, M, PT, SSRC, payload, timestamp)
         return rtpPacket.getPacket()
 
     def yieldFrame(self):

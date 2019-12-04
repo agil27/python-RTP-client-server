@@ -246,6 +246,8 @@ class ClientController:
 
     def handlePlay(self):
         self.state = PLAYING
+        timer = threading.Timer(1, self.activateSliderUpdate)
+        timer.start()
 
     def handlePause(self):
         self.state = READY
@@ -321,3 +323,11 @@ class ClientController:
             self.rtp_socket.bind(('', self.rtp_port))
         except:
             raise BindError
+
+    def activateSliderUpdate(self):
+        if self.state == PLAYING:
+            pos = self.current_timestamp * 1000 // self.total_frames
+            print(self.current_timestamp, pos)
+            self.client_ui.updateSlider(pos)
+            timer = threading.Timer(1, self.activateSliderUpdate)
+            timer.start()

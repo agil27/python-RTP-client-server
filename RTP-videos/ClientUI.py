@@ -72,6 +72,9 @@ class ClientUI:
         self.label.configure(image=photo, height=270)
         self.label.image = photo
 
+    def updateSlider(self, position):
+        self.pos.set(position)
+
     def handler(self):
         self.pauseMovie()
         if tkMessageBox.askokcancel("退出?", "你确认要退出吗"):
