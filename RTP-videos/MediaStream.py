@@ -7,7 +7,7 @@ from math import ceil
 from moviepy.editor import AudioFileClip
 
 VIDEO_FPS = 29.7
-AUDIO_FPS = 48000
+AUDIO_FPS = 44100
 APV = 4 * int(AUDIO_FPS / VIDEO_FPS)
 
 
@@ -17,6 +17,7 @@ class VideoStream:
         self.filename = filename
         self.cap = cv2.VideoCapture(self.filename)
         self.framerate = self.cap.get(5)
+        print(self.framerate)
         self.totalframes = self.cap.get(7)
         self.frameseq = 0
         self.current_frame = 0
@@ -118,21 +119,21 @@ class AudioStream:
     def getFrame(self):
         while True:
             self.event.wait()
-            subclip = self.clip.subclip(self.current_clip * APV / self.samplerate, (self.current_clip + 1) * APV / self.samplerate)
+            subclip = self.clip.subclip(self.current_clip * APV / self.samplerate,
+                                        (self.current_clip + 1) * APV / self.samplerate)
             for (i, frame) in enumerate(subclip.iter_frames()):
                 self.arrbuf[i % APV][0] = frame[0]
                 self.arrbuf[i % APV][1] = frame[1]
-                if (i + 1) % APV == 0:
-                    self.yield_semaphore.acquire()
-                    self.frameseq += 1
-                    slice = self.arrbuf.tobytes()
-                    slice = self.packRTP(slice, self.frameseq, True)
-                    self.buf.push(slice)
-                    self.consume_semaphore.release()
+            self.yield_semaphore.acquire()
+            self.frameseq += 1
+            slice = self.arrbuf.tobytes()
+            slice = self.packRTP(slice, self.frameseq, True)
+            self.buf.push(slice)
+            self.consume_semaphore.release()
             self.current_clip += self.step
 
     def getSamplerate(self):
         return self.samplerate
 
     def setPosition(self, pos):
-        self.current_clip = pos / 4
+        self.current_clip = (pos - 2) // 4
