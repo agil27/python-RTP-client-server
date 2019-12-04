@@ -25,6 +25,9 @@ class ClientController:
         self.rtp_socket = None
         self.rtsp_socket = None
 
+        self.video_framerate = 0
+        self.audio_samplerate = 0
+        self.total_frames = 0
         self.video_frame_seq = 0
         self.audio_frame_seq = 0
         self.frame_buffer = b''
@@ -40,6 +43,7 @@ class ClientController:
         self.video_consume_semaphore = None
         self.audio_consume_semaphore = None
         self.synchronize_semaphore = None
+        self.current_timestamp = 0
 
         self.window = Tk()
 
@@ -53,7 +57,8 @@ class ClientController:
             'setup': self.setup,
             'play': self.play,
             'pause': self.pause,
-            'teardown': self.teardown
+            'teardown': self.teardown,
+            'reposition': self.reposition
         }
         self.client_ui = ClientUI(self.window, event_handlers)
 
@@ -64,18 +69,13 @@ class ClientController:
             self.rtsp_socket.connect((self.server_addr, self.server_port))
         except:
             raise ConnectionError
+        self.receive_thread = threading.Thread(target=self.receiveResponse)
+        self.receive_thread.setDaemon(True)
+        self.receive_thread.start()
 
     def setup(self):
         if self.state == INIT:
-            self.sendSetup()
-        self.samplerate = 44100
-        self.channels = 2
-        self.audio_stream = sd.RawOutputStream(
-            samplerate=self.samplerate,
-            channels=self.channels,
-            dtype='float32'
-        )
-        self.audio_stream.start()
+            self.sendDescribe()
 
     def teardown(self):
         self.sendTeardown()
@@ -89,6 +89,14 @@ class ClientController:
             self.event.set()
             self.createThreads()
             self.sendPlay()
+
+    def reposition(self, permillage):
+        if self.state == READY:
+            self.video_buffer = LinkList()
+            self.audio_buffer = LinkList()
+            startPosition = int(permillage / 1000 * self.total_frames)
+            self.sendReposition(startPosition)
+            self.event.set()
 
     def createThreads(self):
         if self.audio_thread is None:
@@ -111,8 +119,9 @@ class ClientController:
             try:
                 self.event.wait()
                 self.video_consume_semaphore.acquire()
-                self.client_ui.updateMovie(self.retrieveFrame(mediatype=VIDEO))
-                #time.sleep(TIME_ELAPSED)
+                current_frame, self.current_timestamp = self.retrieveFrame(mediatype=VIDEO)
+                self.client_ui.updateMovie(current_frame)
+                # time.sleep(TIME_ELAPSED)
                 # self.synchronize_semaphore.release()
                 self.video_control_event.wait(TIME_ELAPSED)
                 # self.audio_consume_semaphore.acquire()
@@ -123,7 +132,7 @@ class ClientController:
     def playAudio(self):
         while self.video_buffer.len() < 20:
             pass
-        self.audio_control_event.wait(1.75)
+        #self.audio_control_event.wait(1.75)
         while True:
             try:
                 self.event.wait()
@@ -140,15 +149,18 @@ class ClientController:
             self.event.wait()
             try:
                 data = self.rtp_socket.recv(MAX_UDP_BANDWIDTH)
-                if data:
-                    packet = RtpPacket()
-                    packet.decode(data)
-                    current_frame_seq = packet.seqNum()
-                    marker = packet.getMarker()
-                    media_type = packet.getType()
-                    self.receiveIncomingPacket(packet, current_frame_seq, marker, media_type)
             except:
-                raise SocketError
+                print('Socket Error')
+                continue
+
+            if data:
+                packet = RtpPacket()
+                packet.decode(data)
+                current_frame_seq = packet.seqNum()
+                marker = packet.getMarker()
+                media_type = packet.getType()
+                self.receiveIncomingPacket(packet, current_frame_seq, marker, media_type)
+
             if self.teardown_acked:
                 self.rtp_socket.shudown(socket.SHUT_RDWR)
                 self.rtp_socket.close()
@@ -159,18 +171,20 @@ class ClientController:
             if seq > self.video_frame_seq:
                 self.video_frame_seq = seq
                 payload = packet.getPayload()
-                self.restoreFrame(payload, marker, VIDEO)
+                timestamp = packet.timestamp()
+                self.restoreFrame(payload, marker, timestamp, VIDEO)
         if media_type == AUDIO:
             if seq > self.audio_frame_seq:
                 self.audio_frame_seq = seq
                 payload = packet.getPayload()
-                self.restoreFrame(payload, marker, AUDIO)
+                timestamp = packet.timestamp()
+                self.restoreFrame(payload, marker, timestamp, AUDIO)
 
-    def restoreFrame(self, payload, marker, mediatype):
+    def restoreFrame(self, payload, marker, timestamp, mediatype):
         if mediatype == VIDEO:
             self.frame_buffer += payload
             if marker:
-                self.video_buffer.push(self.frame_buffer)
+                self.video_buffer.push((self.frame_buffer, timestamp))
                 self.video_consume_semaphore.release()
                 self.frame_buffer = b''
         if mediatype == AUDIO:
@@ -215,6 +229,10 @@ class ClientController:
                         self.handlePause()
                     if self.request_sent == TEARDOWN:
                         self.handleTeardown()
+                    if self.request_sent == DESCRIBE:
+                        self.video_framerate, self.audio_samplerate, self.total_frames = my_parser.getAVParameters()
+                        print('tf', self.total_frames)
+                        self.handleDescribe()
 
     def handleSetup(self):
         self.state = READY
@@ -237,11 +255,18 @@ class ClientController:
         self.state = INIT
         self.teardown_acked = True
 
+    def handleDescribe(self):
+        self.channels = 2
+        self.sendSetup()
+        self.audio_stream = sd.RawOutputStream(
+            samplerate=self.audio_samplerate,
+            channels=self.channels,
+            dtype='float32'
+        )
+        self.audio_stream.start()
+
     def sendSetup(self):
         if self.state == INIT:
-            self.receive_thread = threading.Thread(target=self.receiveResponse)
-            self.receive_thread.setDaemon(True)
-            self.receive_thread.start()
             self.rtsp_seq += 1
             my_sender = RequestSender(self.rtsp_socket, self.filename, self.rtp_port, self.rtsp_seq, self.session_id)
             my_sender.sendSetup()
@@ -250,7 +275,10 @@ class ClientController:
     def sendPlay(self):
         if self.state == READY:
             self.rtsp_seq += 1
-            my_sender = RequestSender(self.rtsp_socket, self.filename, self.rtp_port, self.rtsp_seq, self.session_id)
+            my_sender = RequestSender(
+                self.rtsp_socket, self.filename,
+                self.rtp_port, self.rtsp_seq,
+                self.session_id)
             my_sender.sendPlay()
             self.request_sent = PLAY
 
@@ -267,6 +295,24 @@ class ClientController:
             my_sender = RequestSender(self.rtsp_socket, self.filename, self.rtp_port, self.rtsp_seq, self.session_id)
             my_sender.sendTeardown()
             self.request_sent = TEARDOWN
+
+    def sendReposition(self, startPosition):
+        if self.state == READY:
+            self.rtsp_seq += 1
+            my_sender = RequestSender(
+                self.rtsp_socket, self.filename,
+                self.rtp_port, self.rtsp_seq,
+                self.session_id, startPosition=startPosition)
+            my_sender.sendPlay()
+            self.request_sent = PLAY
+
+    def sendDescribe(self):
+        my_sender = RequestSender(
+            self.rtsp_socket, self.filename,
+            self.rtp_port, self.rtsp_seq,
+            self.session_id)
+        my_sender.sendDescribe()
+        self.request_sent = DESCRIBE
 
     def openRtpPort(self):
         self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

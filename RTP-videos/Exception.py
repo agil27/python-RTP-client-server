@@ -18,3 +18,9 @@ class BindError(Error):
         pass
     def text(self):
         return '套接字绑定错误'
+
+class ParseError(Error):
+    def __init__(self):
+        pass
+    def text(self):
+        return '解析错误！'

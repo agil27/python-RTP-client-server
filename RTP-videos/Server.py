@@ -9,6 +9,7 @@ from Exception import *
 
 class ServerWorker:
     '''处理单个客户端连接'''
+
     def __init__(self, rtsp_socket, client_addr, filename=DEFAULT_FILENAME):
         self.server_rtp_port = SERVER_RTP_PORT
         self.server_rtcp_port = SERVER_RTCP_PORT
@@ -23,22 +24,24 @@ class ServerWorker:
         self.cseq = 0
         self.url = None
 
-        self.event = None
+        self.event = threading.Event()
         self.state = INIT
         self.listen_thread = None
         self.video_thread = None
         self.audio_thread = None
 
-        self.video_yield_semaphore = None
-        self.video_consume_semaphore = None
-        self.audio_yield_semaphore = None
-        self.audio_consume_semaphore = None
-        self.synchronize_semaphore = None
+        self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.video_yield_semaphore = threading.Semaphore(1)
+        self.video_consume_semaphore = threading.Semaphore(0)
+        self.audio_yield_semaphore = threading.Semaphore(1)
+        self.audio_consume_semaphore = threading.Semaphore(0)
+        self.synchronize_semaphore = threading.Semaphore(0)
 
-        self.rtp_socket = None
         self.video_stream = None
         self.audio_stream = None
-
+        self.total_frames = 0
+        self.video_framerate = 0
+        self.audio_samplerate = 0
         self.client_teardown = False
 
     def playVideo(self):
@@ -50,13 +53,13 @@ class ServerWorker:
                 self.rtp_socket.sendto(frame, (self.client_addr, self.client_rtp_port))
                 self.video_yield_semaphore.release()
                 self.synchronize_semaphore.release()
-                #self.event.wait(TIME_ELAPSED)
+                # self.event.wait(TIME_ELAPSED)
             else:
                 break
 
     def playAudio(self):
         while True:
-            #self.event.wait(TIME_ELAPSED)
+            # self.event.wait(TIME_ELAPSED)
             self.event.wait()
             self.audio_consume_semaphore.acquire()
             for i in range(4):
@@ -82,21 +85,16 @@ class ServerWorker:
         self.sender.sendSetup()
         if self.state == INIT:
             self.state = READY
-            self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.video_yield_semaphore = threading.Semaphore(1)
-            self.video_consume_semaphore = threading.Semaphore(0)
-            self.audio_yield_semaphore = threading.Semaphore(1)
-            self.audio_consume_semaphore = threading.Semaphore(0)
-            self.synchronize_semaphore = threading.Semaphore(0)
-            self.event = threading.Event()
-            self.video_stream = VideoStream(self.media, self.video_consume_semaphore, self.video_yield_semaphore, self.event)
-            self.audio_stream = AudioStream(self.media, self.audio_consume_semaphore, self.audio_yield_semaphore, self.event)
 
     def handlePlay(self):
         self.sender.sendPlay()
         if self.state == READY:
             self.state = PLAYING
             self.createThreads()
+            if self.start_position > 0:
+                self.event.clear()
+                self.video_stream.setPosition(self.start_position)
+                self.audio_stream.setPosition(self.start_position)
             self.event.set()
             self.video_stream.yieldFrame()
             self.audio_stream.yieldFrame()
@@ -107,28 +105,38 @@ class ServerWorker:
             self.state = READY
             self.event.clear()
 
-
     def handleTeardown(self):
         self.sender.sendTeardown()
         self.event.clear()
         self.state = INIT
         self.client_teardown = True
 
+    def handleDescribe(self):
+        self.video_stream = VideoStream(self.media, self.video_consume_semaphore, self.video_yield_semaphore,
+                                        self.event)
+        self.audio_stream = AudioStream(self.media, self.audio_consume_semaphore, self.audio_yield_semaphore,
+                                        self.event)
+        self.total_frames = self.video_stream.getTotalFrames()
+        self.video_framerate = self.video_stream.getFramerate()
+        self.audio_samplerate = self.audio_stream.getSamplerate()
+        self.sender.setAVParameters(self.video_framerate, self.audio_samplerate, self.total_frames)
+        self.sender.sendDescribe()
+
     def handleRtspRequest(self, request):
         my_parser = RequestParser(request)
         method = my_parser.getMethod()
         self.url = my_parser.getUrl()
         self.cseq = my_parser.getCseq()
+        self.start_position = my_parser.getStartPosition()
         if method == SETUP:
             self.client_rtp_port, self.client_rtcp_port = my_parser.getClientPorts()
-
         self.sender = ResponseSender(
             self.rtsp_socket, self.cseq, self.session_id,
             self.url, self.local_ip,
             self.client_rtp_port, self.client_rtcp_port,
             self.server_rtp_port, self.server_rtcp_port,
+            self.video_framerate, self.audio_samplerate, self.total_frames
         )
-
         if method == SETUP:
             self.handleSetup()
         if method == PLAY:
@@ -137,6 +145,8 @@ class ServerWorker:
             self.handleTeardown()
         if method == PAUSE:
             self.handlePause()
+        if method == DESCRIBE:
+            self.handleDescribe()
 
     def generateRandomSessionId(self):
         return random.randint(MIN_SESSION, MAX_SESSION)
@@ -165,7 +175,7 @@ class Server:
         self.port = port
         self.listen_socket = None
 
-    def run(self, max_connections = MAX_CONNECTIONS):
+    def run(self, max_connections=MAX_CONNECTIONS):
         self.listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listen_socket.bind(('0.0.0.0', self.port))
         self.listen_socket.listen(max_connections)
@@ -186,7 +196,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-

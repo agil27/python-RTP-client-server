@@ -9,6 +9,7 @@ class ClientUI:
         self.master = master
         self.master.protocol("WM_DELETE_WINDOW", self.handler)
         self.event_handlers = eventhandlers
+        self.pos = StringVar()
         self.createWidgets()
 
     def createWidgets(self):
@@ -41,7 +42,7 @@ class ClientUI:
         self.label = Label(self.master, height=19)
         self.label.grid(row=0, column=0, columnspan=4, sticky=W + E + N + S, padx=5, pady=5)
 
-        self.slider = Scale(self.master, orient=HORIZONTAL, from_=0, to=1000, length=500)
+        self.slider = Scale(self.master, orient=HORIZONTAL, from_=0, to=1000, length=500, variable=self.pos)
         self.slider.grid(row=1, column=0, columnspan=50)
         self.slider.bind('<Button-1>', self.repositionStart)
         self.slider.bind('<ButtonRelease-1>', self.repositionEnd)
@@ -63,7 +64,7 @@ class ClientUI:
         self.event_handlers['pause']()
 
     def repositionEnd(self, pos):
-        self.event_handlers['play']()
+        self.event_handlers['reposition'](int(self.pos.get()))
 
     def updateMovie(self, frame):
         image_tk = Image.open(BytesIO(frame))
