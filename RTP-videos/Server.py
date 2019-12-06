@@ -122,10 +122,10 @@ class ServerWorker:
     def handleDescribe(self):
         self.video_stream = VideoStream(self.media, self.video_consume_semaphore, self.video_yield_semaphore,
                                         self.event, lowres=self.low_res)
-        self.audio_stream = AudioStream(self.media, self.audio_consume_semaphore, self.audio_yield_semaphore,
-                                        self.event)
         self.total_frames = self.video_stream.getTotalFrames()
         self.video_framerate = self.video_stream.getFramerate()
+        self.audio_stream = AudioStream(self.media, self.audio_consume_semaphore, self.audio_yield_semaphore,
+                                        self.event, vfps=self.video_framerate)
         self.audio_samplerate = self.audio_stream.getSamplerate()
         self.sender.setAVParameters(self.video_framerate, self.audio_samplerate, self.total_frames)
         self.sender.sendDescribe()
@@ -196,6 +196,7 @@ class Server:
         while True:
             try:
                 rtsp_socket, client_addr = self.listen_socket.accept()
+                print('connected to', client_addr, '...')
                 new_worker = ServerWorker(rtsp_socket, client_addr)
                 new_worker.run()
             except:

@@ -39,7 +39,7 @@ class ClientUI:
         # Create Teardown button
         self.teardown = Button(self.master, width=12)
         self.teardown["text"] = "停止"
-        self.teardown["command"] = self.exitClient
+        self.teardown["command"] = self.haltMovie
         self.teardown.grid(row=2, column=2)
 
         self.double = Button(self.master, width=12)
@@ -106,6 +106,9 @@ class ClientUI:
 
     def playMovie(self):
         self.event_handlers['play']()
+
+    def haltMovie(self):
+        self.event_handlers['teardown']()
 
     def repositionStart(self, pos):
         self.event_handlers['pause']()

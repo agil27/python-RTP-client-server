@@ -17,7 +17,16 @@ class ClientController:
         self.server_port = serverport
         self.rtp_port = int(rtpport)
         self.url = url
-        self.filename = url
+        self.initVariables()
+        self.filelist = [
+            'eve1.mp4',
+            'eve2.mp4',
+            'eve3.mp4'
+        ]
+        self.window = Tk()
+
+    def initVariables(self):
+        self.filename = self.url
         self.rtsp_seq = 0
         self.session_id = 0
         self.teardown_acked = False
@@ -57,15 +66,7 @@ class ClientController:
         self.fullscreen = False
         self.changeFullscreen = False
 
-        self.filelist = [
-            'eve1.mp4',
-            'eve2.mp4',
-            'eve3.mp4'
-        ]
-        self.window = Tk()
-
     def run(self):
-        self.connect()
         self.createUI()
         self.window.mainloop()
 
@@ -98,6 +99,8 @@ class ClientController:
         self.receive_thread.start()
 
     def setup(self):
+        self.connect()
+        print(self.filename, self.state)
         if self.filename == self.url:
             return
         else:
@@ -173,23 +176,17 @@ class ClientController:
     def listenForRtp(self):
         print('\nListening...')
         while True:
-            self.event.wait()
             try:
+                self.event.wait()
                 data = self.rtp_socket.recv(MAX_UDP_BANDWIDTH)
+                if data:
+                    packet = RtpPacket()
+                    packet.decode(data)
+                    current_frame_seq = packet.seqNum()
+                    marker = packet.getMarker()
+                    media_type = packet.getType()
+                    self.receiveIncomingPacket(packet, current_frame_seq, marker, media_type)
             except:
-                continue
-
-            if data:
-                packet = RtpPacket()
-                packet.decode(data)
-                current_frame_seq = packet.seqNum()
-                marker = packet.getMarker()
-                media_type = packet.getType()
-                self.receiveIncomingPacket(packet, current_frame_seq, marker, media_type)
-
-            if self.teardown_acked:
-                self.rtp_socket.shudown(socket.SHUT_RDWR)
-                self.rtp_socket.close()
                 break
 
     def receiveIncomingPacket(self, packet, seq, marker, media_type):
@@ -225,13 +222,15 @@ class ClientController:
 
     def receiveResponse(self):
         while True:
-            response = self.rtsp_socket.recv(MAX_RTSP_BANDWIDTH)
-            if response:
-                self.parseResponse(response.decode('utf-8'))
-            if self.request_sent == TEARDOWN:
-                self.rtsp_socket.shutdown(socket.SHUT_RDWR)
-                self.rtsp_socket.close()
-                break
+            try:
+                response = self.rtsp_socket.recv(MAX_RTSP_BANDWIDTH)
+                if response:
+                    self.parseResponse(response.decode('utf-8'))
+            except:
+                if self.teardown_acked:
+                    break
+                else:
+                    continue
 
     def parseResponse(self, data):
         try:
@@ -297,6 +296,11 @@ class ClientController:
     def handleTeardown(self):
         self.state = INIT
         self.teardown_acked = True
+        self.rtsp_socket.shutdown(socket.SHUT_RDWR)
+        self.rtsp_socket.close()
+        self.rtp_socket.close()
+        self.event.clear()
+        self.initVariables()
 
     def handleDescribe(self):
         self.channels = 2
@@ -312,8 +316,8 @@ class ClientController:
         if self.state == INIT:
             self.rtsp_seq += 1
             my_sender = RequestSender(self.rtsp_socket, self.filename, self.rtp_port, self.rtsp_seq, self.session_id)
-            my_sender.sendSetup()
             self.request_sent = SETUP
+            my_sender.sendSetup()
 
     def sendPlay(self):
         if self.state == READY:
@@ -326,22 +330,22 @@ class ClientController:
                 audiobias=self.audio_bias,
                 lowres=self.low_resolution
             )
-            my_sender.sendPlay()
             self.request_sent = PLAY
+            my_sender.sendPlay()
 
     def sendPause(self):
         if self.state == PLAYING:
             self.rtsp_seq += 1
             my_sender = RequestSender(self.rtsp_socket, self.filename, self.rtp_port, self.rtsp_seq, self.session_id)
-            my_sender.sendPause()
             self.request_sent = PAUSE
+            my_sender.sendPause()
 
     def sendTeardown(self):
         if self.state != INIT:
             self.rtsp_seq += 1
             my_sender = RequestSender(self.rtsp_socket, self.filename, self.rtp_port, self.rtsp_seq, self.session_id)
-            my_sender.sendTeardown()
             self.request_sent = TEARDOWN
+            my_sender.sendTeardown()
 
     def sendReposition(self, startPosition):
         if self.state == READY:
@@ -354,16 +358,16 @@ class ClientController:
                 audiobias=self.audio_bias,
                 lowres=self.low_resolution
             )
-            my_sender.sendPlay()
             self.request_sent = PLAY
+            my_sender.sendPlay()
 
     def sendDescribe(self):
         my_sender = RequestSender(
             self.rtsp_socket, self.filename,
             self.rtp_port, self.rtsp_seq,
             self.session_id)
-        my_sender.sendDescribe()
         self.request_sent = DESCRIBE
+        my_sender.sendDescribe()
 
     def openRtpPort(self):
         self.rtp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

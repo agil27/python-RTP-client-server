@@ -5,10 +5,7 @@ from RtpPacket import RtpPacket
 from utils import LinkList
 from math import ceil
 from moviepy.editor import AudioFileClip
-
-VIDEO_FPS = 29.7
-AUDIO_FPS = 44100
-APV = 4 * int(AUDIO_FPS / VIDEO_FPS)
+from Constants import *
 
 
 class VideoStream:
@@ -90,7 +87,7 @@ class VideoStream:
 
 
 class AudioStream:
-    def __init__(self, filename, consume_semaphore, yield_semaphore, event, step=1):
+    def __init__(self, filename, consume_semaphore, yield_semaphore, event, step=1, vfps=DEFAULT_VIDEO_FRAMERATE):
         self.max_frame = 64000
         self.filename = filename
         self.clip = AudioFileClip(self.filename)
@@ -102,7 +99,9 @@ class AudioStream:
         self.yield_semaphore = yield_semaphore
         self.event = event
         self.buf = LinkList()
-        self.arrbuf = np.zeros((APV, 2), dtype=np.float32)
+        self.vfps = vfps
+        self.setAPV(self.vfps)
+        self.arrbuf = np.zeros((self.apv, 2), dtype=np.float32)
         self.yield_thread = None
 
     def packRTP(self, payload, seq, isLast):
@@ -126,11 +125,11 @@ class AudioStream:
     def getFrame(self):
         while True:
             self.event.wait()
-            subclip = self.clip.subclip(self.current_clip * APV / self.samplerate,
-                                        (self.current_clip + 1) * APV / self.samplerate)
+            subclip = self.clip.subclip(self.current_clip * self.apv / self.samplerate,
+                                        (self.current_clip + 1) * self.apv / self.samplerate)
             for (i, frame) in enumerate(subclip.iter_frames()):
-                self.arrbuf[i % APV][0] = frame[0]
-                self.arrbuf[i % APV][1] = frame[1]
+                self.arrbuf[i % self.apv][0] = frame[0]
+                self.arrbuf[i % self.apv][1] = frame[1]
             self.yield_semaphore.acquire()
             self.frameseq += 1
             slice = self.arrbuf.tobytes()
@@ -150,3 +149,6 @@ class AudioStream:
 
     def setBias(self, bias):
         self.current_clip += bias
+
+    def setAPV(self, vfps):
+        self.apv = 4 * int(self.samplerate / vfps)

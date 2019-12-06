@@ -19,7 +19,7 @@ class ResponseParser:
             self.session_id = 0
             if self.request_sent in [SETUP, PLAY]:
                 self.session_id = lines[3].split(' ')[1]
-            elif self.request_sent in [PAUSE, DESCRIBE]:
+            elif self.request_sent in [PAUSE, DESCRIBE, TEARDOWN]:
                 self.session_id = lines[2].split(' ')[1]
             if self.session_id[-1] == ';':
                 self.session_id = self.session_id[:-1]
