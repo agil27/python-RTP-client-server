@@ -23,6 +23,7 @@ class ServerWorker:
         self.session_id = self.generateRandomSessionId()
         self.cseq = 0
         self.url = None
+        self.audio_bias = 0
 
         self.event = threading.Event()
         self.state = INIT
@@ -95,6 +96,9 @@ class ServerWorker:
                 self.event.clear()
                 self.video_stream.setPosition(self.start_position)
                 self.audio_stream.setPosition(self.start_position)
+            if self.audio_bias != 0:
+                self.event.clear()
+                self.audio_stream.setBias(self.audio_bias)
             self.video_stream.setStep(self.step)
             self.audio_stream.setStep(self.step)
             self.event.set()
@@ -132,6 +136,7 @@ class ServerWorker:
         if method == PLAY:
             self.start_position = my_parser.getStartPosition()
             self.step = my_parser.getStep()
+            self.audio_bias = my_parser.getAudioBias()
         if method == SETUP:
             self.client_rtp_port, self.client_rtcp_port = my_parser.getClientPorts()
         self.sender = ResponseSender(

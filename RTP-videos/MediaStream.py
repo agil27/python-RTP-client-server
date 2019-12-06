@@ -142,3 +142,6 @@ class AudioStream:
 
     def setStep(self, step):
         self.step = step
+
+    def setBias(self, bias):
+        self.current_clip += bias

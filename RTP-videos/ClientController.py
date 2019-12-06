@@ -47,6 +47,9 @@ class ClientController:
 
         self.step = 1
         self.changeSpeed = False
+        self.is_mute = False
+        self.audio_bias = 0
+        self.audio_bias_set = False
 
         self.window = Tk()
 
@@ -62,7 +65,9 @@ class ClientController:
             'pause': self.pause,
             'teardown': self.teardown,
             'reposition': self.reposition,
-            'double': self.double
+            'double': self.double,
+            'mute': self.mute,
+            'audioBias': self.audioBias
         }
         self.client_ui = ClientUI(self.window, event_handlers)
 
@@ -142,7 +147,8 @@ class ClientController:
                 self.event.wait()
                 # self.synchronize_semaphore.acquire()
                 self.audio_consume_semaphore.acquire()
-                self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
+                if not self.is_mute:
+                    self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
                 # time.sleep(TIME_ELAPSED)
             except:
                 continue
@@ -258,6 +264,13 @@ class ClientController:
         self.event.clear()
         if self.changeSpeed:
             self.changeSpeed = False
+            self.video_buffer = LinkList()
+            self.audio_buffer = LinkList()
+            self.play()
+        if self.audio_bias_set:
+            self.audio_bias_set = False
+            self.video_buffer = LinkList()
+            self.audio_buffer = LinkList()
             self.play()
 
     def handleTeardown(self):
@@ -287,7 +300,10 @@ class ClientController:
             my_sender = RequestSender(
                 self.rtsp_socket, self.filename,
                 self.rtp_port, self.rtsp_seq,
-                self.session_id, step=self.step)
+                self.session_id, step=self.step,
+                startPosition=self.current_timestamp,
+                audiobias=self.audio_bias
+            )
             my_sender.sendPlay()
             self.request_sent = PLAY
 
@@ -311,7 +327,8 @@ class ClientController:
             my_sender = RequestSender(
                 self.rtsp_socket, self.filename,
                 self.rtp_port, self.rtsp_seq,
-                self.session_id, startPosition=startPosition)
+                self.session_id, step=self.step,
+                startPosition=startPosition, audiobias=self.audio_bias)
             my_sender.sendPlay()
             self.request_sent = PLAY
 
@@ -345,4 +362,14 @@ class ClientController:
             self.step = 1
         if self.state == PLAYING:
             self.changeSpeed = True
+            self.sendPause()
+
+    def mute(self):
+        self.is_mute = not self.is_mute
+        print(self.is_mute)
+
+    def audioBias(self, bias):
+        if self.state == PLAYING:
+            self.audio_bias_set = True
+            self.audio_bias = bias
             self.sendPause()

@@ -46,7 +46,13 @@ class ResponseParser:
 
 
 class RequestSender():
-    def __init__(self, socket, filename, port, cseq, session, startPosition=0, step=1):
+    def __init__(
+            self,
+            socket, filename,
+            port, cseq, session,
+            startPosition=0, step=1,
+            audiobias=0
+    ):
         self.socket = socket
         self.filename = filename
         self.port = port
@@ -54,6 +60,7 @@ class RequestSender():
         self.session = session
         self.start_position = startPosition
         self.step = step
+        self.audio_bias = audiobias
 
     def send(self, request):
         print('\nSend: ', request)
@@ -70,7 +77,10 @@ class RequestSender():
                   'CSeq: %d\n' \
                   'Session: %d\n' \
                   'Range: npt=%d-\n' \
-                  'Step: %d' % (self.filename, self.cseq, self.session, self.start_position, self.step)
+                  'Step: %d\n' \
+                  'AudioBias: %d' % (self.filename, self.cseq,
+                                     self.session, self.start_position,
+                                     self.step, self.audio_bias)
         self.send(request)
 
     def sendPause(self):
@@ -181,6 +191,7 @@ class RequestParser:
         self.cseq = None
         self.client_rtp_port, self.client_rtcp_port = None, None
         self.start_position = None
+        self.audio_bias = 0
         self.parse(data)
 
     def strToMethod(self, str):
@@ -198,6 +209,7 @@ class RequestParser:
         if self.method == PLAY:
             self.start_position = int(lines[3][11:-1])
             self.step = int(lines[4][6:])
+            self.audio_bias = int(lines[5][11:])
 
     def getMethod(self):
         return self.method
@@ -216,3 +228,6 @@ class RequestParser:
 
     def getStep(self):
         return self.step
+
+    def getAudioBias(self):
+        return self.audio_bias

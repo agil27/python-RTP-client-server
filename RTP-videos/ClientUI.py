@@ -15,33 +15,48 @@ class ClientUI:
     def createWidgets(self):
         """Build GUI."""
         # Create Setup button
-        self.setup = Button(self.master, width=15, padx=3, pady=3)
-        self.setup["text"] = "Setup"
+        self.setup = Button(self.master, width=15)
+        self.setup["text"] = "启动"
         self.setup["command"] = self.setupMovie
-        self.setup.grid(row=2, column=0, padx=2, pady=2)
+        self.setup.grid(row=2, column=0)
 
         # Create Play button
-        self.start = Button(self.master, width=15, padx=3, pady=3)
-        self.start["text"] = "Play"
+        self.start = Button(self.master, width=15)
+        self.start["text"] = "播放"
         self.start["command"] = self.playMovie
         self.start.grid(row=2, column=1, padx=2, pady=2)
 
         # Create Pause button
-        self.pause = Button(self.master, width=15, padx=3, pady=3)
-        self.pause["text"] = "Pause"
+        self.pause = Button(self.master, width=15)
+        self.pause["text"] = "暂停"
         self.pause["command"] = self.pauseMovie
-        self.pause.grid(row=2, column=2, padx=2, pady=2)
+        self.pause.grid(row=2, column=2)
 
         # Create Teardown button
-        self.teardown = Button(self.master, width=15, padx=3, pady=3)
-        self.teardown["text"] = "Teardown"
+        self.teardown = Button(self.master, width=15)
+        self.teardown["text"] = "停止"
         self.teardown["command"] = self.exitClient
         self.teardown.grid(row=2, column=3, padx=2, pady=2)
 
-        self.double = Button(self.master, width = 15, padx=3, pady=3)
+        self.double = Button(self.master, width=15)
         self.double["text"] = "2x"
         self.double["command"] = self.doubleSpeed
-        self.double.grid(row=2, column=4, padx=2, pady=2)
+        self.double.grid(row=3, column=1)
+
+        self.mute = Button(self.master, width=15)
+        self.mute["text"] = "静音"
+        self.mute["command"] = self.muteSound
+        self.mute.grid(row=3, column=0)
+
+        self.audiofwd = Button(self.master, width=15)
+        self.audiofwd["text"] = "音频快进"
+        self.audiofwd["command"] = self.audioForward
+        self.audiofwd.grid(row=3, column=2)
+
+        self.audiobwd = Button(self.master, width=15)
+        self.audiobwd["text"] = "音频后退"
+        self.audiobwd["command"] = self.audioBackward
+        self.audiobwd.grid(row=3, column=3)
 
         # Create a label to display the movie
         self.label = Label(self.master, height=19)
@@ -98,3 +113,15 @@ class ClientUI:
         else:
             self.double["text"] = '2x'
         self.event_handlers['double']()
+
+    def muteSound(self):
+        self.event_handlers["mute"]()
+
+    def audioBias(self, bias):
+        self.event_handlers["audioBias"](bias)
+
+    def audioForward(self):
+        self.audioBias(60)
+
+    def audioBackward(self):
+        self.audioBias(-60)
