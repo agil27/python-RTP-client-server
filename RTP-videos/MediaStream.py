@@ -12,12 +12,12 @@ APV = 4 * int(AUDIO_FPS / VIDEO_FPS)
 
 
 class VideoStream:
-    def __init__(self, filename, consume_semaphore, yield_semaphore, event, step=1):
+    def __init__(self, filename, consume_semaphore, yield_semaphore, event, step=1, lowres=False):
         self.max_frame = 64000
         self.filename = filename
         self.cap = cv2.VideoCapture(self.filename)
         self.framerate = self.cap.get(5)
-        print(self.framerate)
+        self.low_res = lowres
         self.totalframes = self.cap.get(7)
         self.frameseq = 0
         self.current_frame = 0
@@ -54,7 +54,8 @@ class VideoStream:
                 res, frame = self.cap.read()
             if res:
                 self.current_frame += self.step
-                frame = cv2.resize(frame, (480, 270), interpolation=cv2.INTER_AREA)
+                photo_size = (480, 270) if not self.low_res else (320, 180)
+                frame = cv2.resize(frame, photo_size, interpolation=cv2.INTER_AREA)
                 stashed = cv2.imencode('.jpg', frame)[1]
                 stashed = np.array(stashed).tobytes()
                 num_slices = ceil(len(stashed) / self.max_frame)
@@ -83,6 +84,9 @@ class VideoStream:
 
     def setStep(self, step):
         self.step = step
+
+    def setLowResolution(self, lowres):
+        self.low_res = lowres
 
 
 class AudioStream:

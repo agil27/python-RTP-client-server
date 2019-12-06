@@ -44,6 +44,7 @@ class ServerWorker:
         self.video_framerate = 0
         self.audio_samplerate = 0
         self.client_teardown = False
+        self.low_res = False
 
     def playVideo(self):
         while True:
@@ -99,6 +100,7 @@ class ServerWorker:
             if self.audio_bias != 0:
                 self.event.clear()
                 self.audio_stream.setBias(self.audio_bias)
+            self.video_stream.setLowResolution(self.low_res)
             self.video_stream.setStep(self.step)
             self.audio_stream.setStep(self.step)
             self.event.set()
@@ -119,7 +121,7 @@ class ServerWorker:
 
     def handleDescribe(self):
         self.video_stream = VideoStream(self.media, self.video_consume_semaphore, self.video_yield_semaphore,
-                                        self.event)
+                                        self.event, lowres=self.low_res)
         self.audio_stream = AudioStream(self.media, self.audio_consume_semaphore, self.audio_yield_semaphore,
                                         self.event)
         self.total_frames = self.video_stream.getTotalFrames()
@@ -138,6 +140,7 @@ class ServerWorker:
             self.start_position = my_parser.getStartPosition()
             self.step = my_parser.getStep()
             self.audio_bias = my_parser.getAudioBias()
+            self.low_res = my_parser.isLowResolution()
         if method == SETUP:
             self.client_rtp_port, self.client_rtcp_port = my_parser.getClientPorts()
         self.sender = ResponseSender(

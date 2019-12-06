@@ -1,6 +1,5 @@
 import socket, threading
 from RtpPacket import RtpPacket
-import time
 from utils import LinkList
 import sounddevice as sd
 from Exception import *
@@ -8,6 +7,8 @@ from Constants import *
 from RtspTools import ResponseParser, RequestSender
 from ClientUI import ClientUI
 from tkinter import Tk
+from PIL import Image
+from io import BytesIO
 
 
 class ClientController:
@@ -51,13 +52,16 @@ class ClientController:
         self.is_mute = False
         self.audio_bias = 0
         self.audio_bias_set = False
+        self.low_resolution = False
+        self.changeResolution = False
+        self.fullscreen = False
+        self.changeFullscreen = False
 
         self.filelist = [
             'eve1.mp4',
             'eve2.mp4',
             'eve3.mp4'
         ]
-
         self.window = Tk()
 
     def run(self):
@@ -75,9 +79,12 @@ class ClientController:
             'double': self.double,
             'mute': self.mute,
             'audioBias': self.audioBias,
-            'selectFile': self.selectFile
+            'selectFile': self.selectFile,
+            'setLowres': self.setLowResolution,
+            'setFullscreen': self.setFullScreen
         }
         self.client_ui = ClientUI(self.window, event_handlers, self.filelist)
+        self.screen_width, self.screen_height = self.client_ui.width, self.client_ui.height
 
     def connect(self):
         self.rtsp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -140,8 +147,14 @@ class ClientController:
                 self.event.wait()
                 self.video_consume_semaphore.acquire()
                 current_frame, self.current_timestamp = self.retrieveFrame(mediatype=VIDEO)
-                self.client_ui.updateMovie(current_frame)
-                self.video_control_event.wait(TIME_ELAPSED)
+                current_image = Image.open(BytesIO(current_frame))
+                if self.fullscreen:
+                    current_image = current_image.resize((self.screen_width, self.screen_height), Image.ANTIALIAS)
+                elif self.low_resolution:
+                    current_image = current_image.resize((480, 270), Image.ANTIALIAS)
+                self.client_ui.updateMovie(current_image)
+                if not self.fullscreen:
+                    self.video_control_event.wait(TIME_ELAPSED)
             except:
                 continue
 
@@ -275,6 +288,11 @@ class ClientController:
             self.video_buffer = LinkList()
             self.audio_buffer = LinkList()
             self.play()
+        if self.changeResolution:
+            self.changeResolution = False
+            self.video_buffer = LinkList()
+            self.audio_buffer = LinkList()
+            self.play()
 
     def handleTeardown(self):
         self.state = INIT
@@ -305,7 +323,8 @@ class ClientController:
                 self.rtp_port, self.rtsp_seq,
                 self.session_id, step=self.step,
                 startPosition=self.current_timestamp,
-                audiobias=self.audio_bias
+                audiobias=self.audio_bias,
+                lowres=self.low_resolution
             )
             my_sender.sendPlay()
             self.request_sent = PLAY
@@ -331,7 +350,10 @@ class ClientController:
                 self.rtsp_socket, self.filename,
                 self.rtp_port, self.rtsp_seq,
                 self.session_id, step=self.step,
-                startPosition=startPosition, audiobias=self.audio_bias)
+                startPosition=startPosition,
+                audiobias=self.audio_bias,
+                lowres=self.low_resolution
+            )
             my_sender.sendPlay()
             self.request_sent = PLAY
 
@@ -379,3 +401,12 @@ class ClientController:
 
     def selectFile(self, filename):
         self.filename = self.url + '/' + filename
+
+    def setLowResolution(self, isLowRes):
+        self.low_resolution = isLowRes
+        if self.state == PLAYING:
+            self.changeResolution = True
+            self.sendPause()
+
+    def setFullScreen(self, isFullscreen):
+        self.fullscreen = isFullscreen

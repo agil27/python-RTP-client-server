@@ -51,7 +51,8 @@ class RequestSender():
             socket, filename,
             port, cseq, session,
             startPosition=0, step=1,
-            audiobias=0
+            audiobias=0,
+            lowres=False
     ):
         self.socket = socket
         self.filename = filename
@@ -61,6 +62,10 @@ class RequestSender():
         self.start_position = startPosition
         self.step = step
         self.audio_bias = audiobias
+        if lowres:
+            self.resolution = 'low'
+        else:
+            self.resolution = 'high'
 
     def send(self, request):
         print('\nSend: ', request)
@@ -78,9 +83,10 @@ class RequestSender():
                   'Session: %d\n' \
                   'Range: npt=%d-\n' \
                   'Step: %d\n' \
-                  'AudioBias: %d' % (self.filename, self.cseq,
+                  'AudioBias: %d\n' \
+                  'Resolution: %s\n' % (self.filename, self.cseq,
                                      self.session, self.start_position,
-                                     self.step, self.audio_bias)
+                                     self.step, self.audio_bias, self.resolution)
         self.send(request)
 
     def sendPause(self):
@@ -211,6 +217,11 @@ class RequestParser:
             self.start_position = int(lines[3][11:-1])
             self.step = int(lines[4][6:])
             self.audio_bias = int(lines[5][11:])
+            self.resolution = lines[6][12:]
+            if self.resolution == 'high':
+                self.lowres = False
+            else:
+                self.lowres = True
 
     def getMethod(self):
         return self.method
@@ -235,3 +246,6 @@ class RequestParser:
 
     def getFilename(self):
         return self.filename
+
+    def isLowResolution(self):
+        return self.lowres

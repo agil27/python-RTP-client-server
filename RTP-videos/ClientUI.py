@@ -1,7 +1,7 @@
 from tkinter import *
 import tkinter.messagebox as tkMessageBox
-from PIL import Image, ImageTk
-from io import BytesIO
+from PIL import ImageTk
+
 
 
 class ClientUI:
@@ -10,39 +10,42 @@ class ClientUI:
         self.master.protocol("WM_DELETE_WINDOW", self.handler)
         self.event_handlers = eventhandlers
         self.filelist = filelist
+        self.width = self.master.winfo_screenwidth()
+        self.height = self.master.winfo_screenheight()
+        self.isFullscreen = False
         self.pos = StringVar()
         self.createWidgets()
 
     def createWidgets(self):
         """Build GUI."""
         # Create Setup button
-        self.setup = Button(self.master, width=12)
-        self.setup["text"] = "启动"
-        self.setup["command"] = self.setupMovie
-        self.setup.grid(row=2, column=0)
+        self.resolution = Button(self.master, width=12)
+        self.resolution["text"] = "流畅"
+        self.resolution["command"] = self.changeResolution
+        self.resolution.grid(row=2, column=4)
 
         # Create Play button
         self.start = Button(self.master, width=12)
         self.start["text"] = "播放"
         self.start["command"] = self.playMovie
-        self.start.grid(row=2, column=1)
+        self.start.grid(row=2, column=0)
 
         # Create Pause button
         self.pause = Button(self.master, width=12)
         self.pause["text"] = "暂停"
         self.pause["command"] = self.pauseMovie
-        self.pause.grid(row=2, column=2)
+        self.pause.grid(row=2, column=1)
 
         # Create Teardown button
         self.teardown = Button(self.master, width=12)
         self.teardown["text"] = "停止"
         self.teardown["command"] = self.exitClient
-        self.teardown.grid(row=2, column=3)
+        self.teardown.grid(row=2, column=2)
 
         self.double = Button(self.master, width=12)
         self.double["text"] = "2x"
         self.double["command"] = self.doubleSpeed
-        self.double.grid(row=3, column=1)
+        self.double.grid(row=2, column=3)
 
         self.mute = Button(self.master, width=12)
         self.mute["text"] = "静音"
@@ -62,7 +65,7 @@ class ClientUI:
         self.fullscreen = Button(self.master, width=12)
         self.fullscreen["text"] = "全屏"
         self.fullscreen["command"] = self.fullScreen
-        self.fullscreen.grid(row=2, column=4)
+        self.fullscreen.grid(row=3, column=1)
 
         self.sub = Button(self.master, width=12)
         self.sub["text"] = "显示弹幕"
@@ -80,13 +83,16 @@ class ClientUI:
         self.playentry.configure(yscrollcommand=self.scroll.set)
 
         # Create a label to display the movie
-        self.label = Label(self.master, height=19)
+        self.label = Label(self.master, height=18)
         self.label.grid(row=0, column=0, columnspan=5)
 
         self.slider = Scale(self.master, orient=HORIZONTAL, from_=0, to=1000, length=500, variable=self.pos)
         self.slider.grid(row=1, column=0, columnspan=5)
         self.slider.bind('<Button-1>', self.repositionStart)
         self.slider.bind('<ButtonRelease-1>', self.repositionEnd)
+
+        self.top = None
+        self.master.bind('<Escape>', self.onEscPressed)
 
     def setupMovie(self):
         self.event_handlers['setup']()
@@ -113,10 +119,13 @@ class ClientUI:
         self.event_handlers['reposition'](position)
 
     def updateMovie(self, frame):
-        image_tk = Image.open(BytesIO(frame))
-        photo = ImageTk.PhotoImage(image_tk)
-        self.label.configure(image=photo, height=270)
-        self.label.image = photo
+        try:
+            photo = ImageTk.PhotoImage(frame)
+            photo_height = 270 if not self.isFullscreen else self.height
+            self.label.configure(image=photo, height=photo_height)
+            self.label.image = photo
+        except AttributeError:
+            return
 
     def updateSlider(self, position):
         self.pos.set(position)
@@ -148,10 +157,14 @@ class ClientUI:
         self.audioBias(-60)
 
     def fullScreen(self):
-        w = self.master.winfo_screenwidth()
-        h = self.master.winfo_screenheight()
-        self.master.geometry("%dx%d" % (w, h))
-        self.master.attributes("-topmost", True)
+        self.isFullscreen = True
+        self.top = Toplevel()
+        self.top.geometry("%dx%d" % (self.width, self.height))
+        self.top.attributes("-topmost", True)
+        self.top.title('全屏播放')
+        self.label = Label(self.top, height=40)
+        self.label.grid(row=0, column=0, columnspan=5)
+        self.event_handlers['setFullscreen'](True)
 
     def subtitle(self):
         pass
@@ -159,3 +172,24 @@ class ClientUI:
     def selectFile(self, event):
         index = int(self.playentry.curselection()[0])
         self.event_handlers['selectFile'](self.filelist[index])
+        self.setupMovie()
+
+    def changeResolution(self):
+        if self.resolution["text"] == '流畅':
+            self.event_handlers['setLowres'](True)
+            self.resolution["text"] = '标清'
+        else:
+            self.event_handlers['setLowres'](False)
+            self.resolution["text"] = '流畅'
+
+    def onEscPressed(self, event):
+        if self.isFullscreen:
+            self.isFullscreen = False
+            self.smallify()
+
+    def smallify(self):
+        self.top.destroy()
+        self.top = None
+        self.label = Label(self.master, height=18)
+        self.label.grid(row=0, column=0, columnspan=5)
+        self.event_handlers['setFullscreen'](False)
