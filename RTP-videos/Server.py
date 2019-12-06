@@ -133,6 +133,7 @@ class ServerWorker:
         method = my_parser.getMethod()
         self.url = my_parser.getUrl()
         self.cseq = my_parser.getCseq()
+        self.media = FILENAME_PREFIX + '/' + my_parser.getFilename()
         if method == PLAY:
             self.start_position = my_parser.getStartPosition()
             self.step = my_parser.getStep()

@@ -11,11 +11,12 @@ from tkinter import Tk
 
 
 class ClientController:
-    def __init__(self, serveraddr, serverport, rtpport, filename):
+    def __init__(self, serveraddr, serverport, rtpport, url):
         self.server_addr = serveraddr
         self.server_port = serverport
         self.rtp_port = int(rtpport)
-        self.filename = filename
+        self.url = url
+        self.filename = url
         self.rtsp_seq = 0
         self.session_id = 0
         self.teardown_acked = False
@@ -51,6 +52,12 @@ class ClientController:
         self.audio_bias = 0
         self.audio_bias_set = False
 
+        self.filelist = [
+            'eve1.mp4',
+            'eve2.mp4',
+            'eve3.mp4'
+        ]
+
         self.window = Tk()
 
     def run(self):
@@ -67,9 +74,10 @@ class ClientController:
             'reposition': self.reposition,
             'double': self.double,
             'mute': self.mute,
-            'audioBias': self.audioBias
+            'audioBias': self.audioBias,
+            'selectFile': self.selectFile
         }
-        self.client_ui = ClientUI(self.window, event_handlers)
+        self.client_ui = ClientUI(self.window, event_handlers, self.filelist)
 
     def connect(self):
         self.rtsp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -83,8 +91,11 @@ class ClientController:
         self.receive_thread.start()
 
     def setup(self):
-        if self.state == INIT:
-            self.sendDescribe()
+        if self.filename == self.url:
+            return
+        else:
+            if self.state == INIT:
+                self.sendDescribe()
 
     def teardown(self):
         self.sendTeardown()
@@ -130,26 +141,19 @@ class ClientController:
                 self.video_consume_semaphore.acquire()
                 current_frame, self.current_timestamp = self.retrieveFrame(mediatype=VIDEO)
                 self.client_ui.updateMovie(current_frame)
-                # time.sleep(TIME_ELAPSED)
-                # self.synchronize_semaphore.release()
                 self.video_control_event.wait(TIME_ELAPSED)
-                # self.audio_consume_semaphore.acquire()
-                # self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
             except:
                 continue
 
     def playAudio(self):
         while self.video_buffer.len() < 20:
             pass
-        # self.audio_control_event.wait(1.75)
         while True:
             try:
                 self.event.wait()
-                # self.synchronize_semaphore.acquire()
                 self.audio_consume_semaphore.acquire()
                 if not self.is_mute:
                     self.audio_stream.write(self.retrieveFrame(mediatype=AUDIO))
-                # time.sleep(TIME_ELAPSED)
             except:
                 continue
 
@@ -160,7 +164,6 @@ class ClientController:
             try:
                 data = self.rtp_socket.recv(MAX_UDP_BANDWIDTH)
             except:
-                print('Socket Error')
                 continue
 
             if data:
@@ -373,3 +376,6 @@ class ClientController:
             self.audio_bias_set = True
             self.audio_bias = bias
             self.sendPause()
+
+    def selectFile(self, filename):
+        self.filename = self.url + '/' + filename

@@ -84,6 +84,7 @@ class VideoStream:
     def setStep(self, step):
         self.step = step
 
+
 class AudioStream:
     def __init__(self, filename, consume_semaphore, yield_semaphore, event, step=1):
         self.max_frame = 64000

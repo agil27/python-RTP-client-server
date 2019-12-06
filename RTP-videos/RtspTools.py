@@ -201,6 +201,7 @@ class RequestParser:
         lines = data.split('\n')
         info = lines[0].split(' ')
         self.method, self.url, self.version = info[0], info[1], info[2]
+        self.filename = re.search(r'rtp://\d{3}.\d+.\d+.\d+:\d+/(\S+)', self.url).groups()[0]
         self.method = self.strToMethod(self.method)
         self.cseq = int(lines[1][5:])
         if self.method == SETUP:
@@ -231,3 +232,6 @@ class RequestParser:
 
     def getAudioBias(self):
         return self.audio_bias
+
+    def getFilename(self):
+        return self.filename
