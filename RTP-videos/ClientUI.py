@@ -5,10 +5,10 @@ from PIL import ImageTk
 
 
 class ClientUI:
-    def __init__(self, master, eventhandlers, filelist):
+    def __init__(self, master, filelist):
         self.master = master
         self.master.protocol("WM_DELETE_WINDOW", self.handler)
-        self.event_handlers = eventhandlers
+        self.event_handlers = None
         self.filelist = filelist
         self.width = self.master.winfo_screenwidth()
         self.height = self.master.winfo_screenheight()
@@ -174,6 +174,7 @@ class ClientUI:
 
     def selectFile(self, event):
         index = int(self.playentry.curselection()[0])
+        print(self.event_handlers, self.filelist)
         self.event_handlers['selectFile'](self.filelist[index])
         self.setupMovie()
 
@@ -196,3 +197,6 @@ class ClientUI:
         self.label = Label(self.master, height=18)
         self.label.grid(row=0, column=0, columnspan=5)
         self.event_handlers['setFullscreen'](False)
+
+    def setHandlers(self, handlers):
+        self.event_handlers = handlers

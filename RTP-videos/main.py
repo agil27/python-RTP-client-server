@@ -1,8 +1,8 @@
-from ClientController import ClientController as cc
+from ClientController import Client
 from Exception import *
 
-mycc = cc('127.0.0.1', 8554, 32254, 'rtp://127.0.0.1:8554')
+client = Client('127.0.0.1', 8554, 32254, 'rtp://127.0.0.1:8554')
 try:
-    mycc.run()
+    client.run()
 except Error as e:
     e.text()

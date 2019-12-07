@@ -12,21 +12,17 @@ from io import BytesIO
 
 
 class ClientController:
-    def __init__(self, serveraddr, serverport, rtpport, url):
+    def __init__(self, serveraddr, serverport, rtpport, filename, ui, width, height):
         self.server_addr = serveraddr
         self.server_port = serverport
         self.rtp_port = int(rtpport)
-        self.url = url
+        self.filename = filename
+        self.client_ui = ui
+        self.screen_width = width
+        self.screen_height = height
         self.initVariables()
-        self.filelist = [
-            'eve1.mp4',
-            'eve2.mp4',
-            'eve3.mp4'
-        ]
-        self.window = Tk()
 
     def initVariables(self):
-        self.filename = self.url
         self.rtsp_seq = 0
         self.session_id = 0
         self.teardown_acked = False
@@ -66,27 +62,6 @@ class ClientController:
         self.fullscreen = False
         self.changeFullscreen = False
 
-    def run(self):
-        self.createUI()
-        self.window.mainloop()
-
-    def createUI(self):
-        event_handlers = {
-            'setup': self.setup,
-            'play': self.play,
-            'pause': self.pause,
-            'teardown': self.teardown,
-            'reposition': self.reposition,
-            'double': self.double,
-            'mute': self.mute,
-            'audioBias': self.audioBias,
-            'selectFile': self.selectFile,
-            'setLowres': self.setLowResolution,
-            'setFullscreen': self.setFullScreen
-        }
-        self.client_ui = ClientUI(self.window, event_handlers, self.filelist)
-        self.screen_width, self.screen_height = self.client_ui.width, self.client_ui.height
-
     def connect(self):
         self.rtsp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print(self.rtsp_socket, self.server_addr, self.server_port)
@@ -101,11 +76,8 @@ class ClientController:
     def setup(self):
         self.connect()
         print(self.filename, self.state)
-        if self.filename == self.url:
-            return
-        else:
-            if self.state == INIT:
-                self.sendDescribe()
+        if self.state == INIT:
+            self.sendDescribe()
 
     def teardown(self):
         self.sendTeardown()
@@ -147,6 +119,8 @@ class ClientController:
             pass
         while True:
             try:
+                if self.teardown_acked:
+                    return
                 self.event.wait()
                 self.video_consume_semaphore.acquire()
                 current_frame, self.current_timestamp = self.retrieveFrame(mediatype=VIDEO)
@@ -166,6 +140,8 @@ class ClientController:
             pass
         while True:
             try:
+                if self.teardown_acked:
+                    return
                 self.event.wait()
                 self.audio_consume_semaphore.acquire()
                 if not self.is_mute:
@@ -177,6 +153,8 @@ class ClientController:
         print('\nListening...')
         while True:
             try:
+                if self.teardown_acked:
+                    return
                 self.event.wait()
                 data = self.rtp_socket.recv(MAX_UDP_BANDWIDTH)
                 if data:
@@ -300,7 +278,6 @@ class ClientController:
         self.rtsp_socket.close()
         self.rtp_socket.close()
         self.event.clear()
-        self.initVariables()
 
     def handleDescribe(self):
         self.channels = 2
@@ -403,9 +380,6 @@ class ClientController:
             self.audio_bias = bias
             self.sendPause()
 
-    def selectFile(self, filename):
-        self.filename = self.url + '/' + filename
-
     def setLowResolution(self, isLowRes):
         self.low_resolution = isLowRes
         if self.state == PLAYING:
@@ -414,3 +388,57 @@ class ClientController:
 
     def setFullScreen(self, isFullscreen):
         self.fullscreen = isFullscreen
+
+
+class Client:
+    def __init__(self, serveraddr, serverport, rtpport, url):
+        self.server_addr = serveraddr
+        self.server_port = serverport
+        self.rtp_port = int(rtpport)
+        self.url = url
+        self.filename = self.url
+        self.filelist = [
+            'eve1.mp4',
+            'eve2.mp4',
+            'eve3.mp4'
+        ]
+        self.window = Tk()
+
+    def createController(self):
+        self.client_controller = ClientController(self.server_addr,
+                                                  self.server_port, self.rtp_port,
+                                                  self.filename, self.client_ui,
+                                                  self.screen_width, self.screen_height)
+
+    def createUI(self):
+        inital_handlers = {
+            'selectFile': self.selectFile
+        }
+        self.client_ui = ClientUI(self.window, self.filelist)
+        self.client_ui.setHandlers(inital_handlers)
+        self.screen_width, self.screen_height = self.client_ui.width, self.client_ui.height
+
+    def bindHandlers(self):
+        self.event_handlers = {
+            'setup': self.client_controller.setup,
+            'play': self.client_controller.play,
+            'pause': self.client_controller.pause,
+            'teardown': self.client_controller.teardown,
+            'reposition': self.client_controller.reposition,
+            'double': self.client_controller.double,
+            'mute': self.client_controller.mute,
+            'audioBias': self.client_controller.audioBias,
+            'selectFile': self.selectFile,
+            'setLowres': self.client_controller.setLowResolution,
+            'setFullscreen': self.client_controller.setFullScreen
+        }
+        self.client_ui.setHandlers(self.event_handlers)
+
+    def selectFile(self, filename):
+        self.filename = self.url + '/' + filename
+        self.createController()
+        self.bindHandlers()
+
+    def run(self):
+        self.createUI()
+        self.window.mainloop()
