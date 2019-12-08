@@ -7,6 +7,7 @@ from PIL import ImageTk
 class ClientUI:
     def __init__(self, master, filelist):
         self.master = master
+        self.master.title('双击选择电影播放')
         self.master.protocol("WM_DELETE_WINDOW", self.handler)
         self.event_handlers = None
         self.filelist = filelist
@@ -94,6 +95,16 @@ class ClientUI:
         self.top = None
         self.master.bind('<Escape>', self.onEscPressed)
 
+        self.buttons = [
+            self.start, self.pause,
+            self.resolution, self.teardown,
+            self.double, self.mute,
+            self.audiofwd, self.audiobwd,
+            self.fullscreen, self.sub
+        ]
+
+        self.setButtonState("disabled")
+
     def setupMovie(self):
         self.event_handlers['setup']()
 
@@ -109,6 +120,7 @@ class ClientUI:
 
     def haltMovie(self):
         self.event_handlers['teardown']()
+        self.setButtonState("disabled")
 
     def repositionStart(self, pos):
         self.event_handlers['pause']()
@@ -164,7 +176,7 @@ class ClientUI:
         self.top = Toplevel()
         self.top.geometry("%dx%d" % (self.width, self.height))
         self.top.attributes("-topmost", True)
-        self.top.title('全屏播放')
+        self.top.title('全屏播放，按ESC退出')
         self.label = Label(self.top, height=40)
         self.label.grid(row=0, column=0, columnspan=5)
         self.event_handlers['setFullscreen'](True)
@@ -174,9 +186,10 @@ class ClientUI:
 
     def selectFile(self, event):
         index = int(self.playentry.curselection()[0])
-        print(self.event_handlers, self.filelist)
         self.event_handlers['selectFile'](self.filelist[index])
         self.setupMovie()
+        self.setButtonState("normal")
+        self.master.title(self.filelist[index])
 
     def changeResolution(self):
         if self.resolution["text"] == '流畅':
@@ -200,3 +213,7 @@ class ClientUI:
 
     def setHandlers(self, handlers):
         self.event_handlers = handlers
+
+    def setButtonState(self, state):
+        for button in self.buttons:
+            button["state"] = state
