@@ -14,6 +14,7 @@ class ClientUI:
         self.width = self.master.winfo_screenwidth()
         self.height = self.master.winfo_screenheight()
         self.isFullscreen = False
+        self.connected = False
         self.pos = StringVar()
         self.createWidgets()
 
@@ -121,6 +122,7 @@ class ClientUI:
     def haltMovie(self):
         self.event_handlers['teardown']()
         self.setButtonState("disabled")
+        self.connected = False
 
     def repositionStart(self, pos):
         self.event_handlers['pause']()
@@ -146,11 +148,14 @@ class ClientUI:
         self.pos.set(position)
 
     def handler(self):
-        self.pauseMovie()
-        if tkMessageBox.askokcancel("退出?", "你确认要退出吗"):
-            self.exitClient()
+        if self.connected:
+            self.pauseMovie()
+            if tkMessageBox.askokcancel("退出?", "你确认要退出吗"):
+                self.exitClient()
+            else:
+                self.playMovie()
         else:
-            self.playMovie()
+            self.exitClient()
 
     def doubleSpeed(self):
         if self.double["text"] == '2x':
@@ -177,6 +182,7 @@ class ClientUI:
         self.top.geometry("%dx%d" % (self.width, self.height))
         self.top.attributes("-topmost", True)
         self.top.title('全屏播放，按ESC退出')
+        self.top.bind('<Escape>', self.onEscPressed)
         self.label = Label(self.top, height=40)
         self.label.grid(row=0, column=0, columnspan=5)
         self.event_handlers['setFullscreen'](True)
@@ -190,6 +196,7 @@ class ClientUI:
         self.setupMovie()
         self.setButtonState("normal")
         self.master.title(self.filelist[index])
+        self.connected = True
 
     def changeResolution(self):
         if self.resolution["text"] == '流畅':

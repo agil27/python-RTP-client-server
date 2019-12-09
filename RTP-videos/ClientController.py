@@ -61,6 +61,7 @@ class ClientController:
         self.changeResolution = False
         self.fullscreen = False
         self.changeFullscreen = False
+        self.subtitleRequired = True
 
     def connect(self):
         self.rtsp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -305,7 +306,8 @@ class ClientController:
                 self.session_id, step=self.step,
                 startPosition=self.current_timestamp,
                 audiobias=self.audio_bias,
-                lowres=self.low_resolution
+                lowres=self.low_resolution,
+                subtitleRequired=self.subtitleRequired
             )
             self.request_sent = PLAY
             my_sender.sendPlay()
@@ -333,7 +335,8 @@ class ClientController:
                 self.session_id, step=self.step,
                 startPosition=startPosition,
                 audiobias=self.audio_bias,
-                lowres=self.low_resolution
+                lowres=self.low_resolution,
+                subtitleRequired=self.subtitleRequired
             )
             self.request_sent = PLAY
             my_sender.sendPlay()

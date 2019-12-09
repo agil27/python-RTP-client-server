@@ -52,7 +52,8 @@ class RequestSender():
             port, cseq, session,
             startPosition=0, step=1,
             audiobias=0,
-            lowres=False
+            lowres=False,
+            subtitleRequired=False
     ):
         self.socket = socket
         self.filename = filename
@@ -62,6 +63,7 @@ class RequestSender():
         self.start_position = startPosition
         self.step = step
         self.audio_bias = audiobias
+        self.subtitleRequired = 'True' if subtitleRequired else 'False'
         if lowres:
             self.resolution = 'low'
         else:
@@ -84,9 +86,10 @@ class RequestSender():
                   'Range: npt=%d-\n' \
                   'Step: %d\n' \
                   'AudioBias: %d\n' \
-                  'Resolution: %s\n' % (self.filename, self.cseq,
+                  'Resolution: %s\n' \
+                  'Subtitles: %s' % (self.filename, self.cseq,
                                      self.session, self.start_position,
-                                     self.step, self.audio_bias, self.resolution)
+                                     self.step, self.audio_bias, self.resolution, self.subtitleRequired)
         self.send(request)
 
     def sendPause(self):
@@ -197,6 +200,7 @@ class RequestParser:
         self.cseq = None
         self.client_rtp_port, self.client_rtcp_port = None, None
         self.start_position = None
+        self.subtitleRequired = False
         self.audio_bias = 0
         self.parse(data)
 
@@ -218,6 +222,7 @@ class RequestParser:
             self.step = int(lines[4][6:])
             self.audio_bias = int(lines[5][11:])
             self.resolution = lines[6][12:]
+            self.subtitleRequired = (lines[7][11:] == 'True')
             if self.resolution == 'high':
                 self.lowres = False
             else:
@@ -249,3 +254,6 @@ class RequestParser:
 
     def isLowResolution(self):
         return self.lowres
+
+    def isSubtitleRequired(self):
+        return self.subtitleRequired

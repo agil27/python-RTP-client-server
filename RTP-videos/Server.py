@@ -45,6 +45,7 @@ class ServerWorker:
         self.audio_samplerate = 0
         self.client_teardown = False
         self.low_res = False
+        self.subtitle_required = False
 
     def playVideo(self):
         while True:
@@ -100,6 +101,7 @@ class ServerWorker:
             if self.audio_bias != 0:
                 self.event.clear()
                 self.audio_stream.setBias(self.audio_bias)
+            self.video_stream.setSubtitles(self.subtitle_required)
             self.video_stream.setLowResolution(self.low_res)
             self.video_stream.setStep(self.step)
             self.audio_stream.setStep(self.step)
@@ -135,12 +137,13 @@ class ServerWorker:
         method = my_parser.getMethod()
         self.url = my_parser.getUrl()
         self.cseq = my_parser.getCseq()
-        self.media = FILENAME_PREFIX + '/' + my_parser.getFilename()
+        self.media = FILENAME_PREFIX + my_parser.getFilename()
         if method == PLAY:
             self.start_position = my_parser.getStartPosition()
             self.step = my_parser.getStep()
             self.audio_bias = my_parser.getAudioBias()
             self.low_res = my_parser.isLowResolution()
+            self.subtitle_required = my_parser.isSubtitleRequired()
         if method == SETUP:
             self.client_rtp_port, self.client_rtcp_port = my_parser.getClientPorts()
         self.sender = ResponseSender(

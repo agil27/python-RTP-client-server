@@ -6,7 +6,8 @@ from utils import LinkList
 from math import ceil
 from moviepy.editor import AudioFileClip
 from Constants import *
-
+from SrtParser import SrtParser
+import os
 
 class VideoStream:
     def __init__(self, filename, consume_semaphore, yield_semaphore, event, step=1, lowres=False):
@@ -15,7 +16,7 @@ class VideoStream:
         self.cap = cv2.VideoCapture(self.filename)
         self.framerate = self.cap.get(5)
         self.low_res = lowres
-        self.totalframes = self.cap.get(7)
+        self.totalframes = int(self.cap.get(7))
         self.frameseq = 0
         self.current_frame = 0
         self.step = step
@@ -24,6 +25,14 @@ class VideoStream:
         self.event = event
         self.buf = LinkList()
         self.yield_thread = None
+        self.subtitle_required = False
+        self.subs = None
+        self.createSubReader()
+
+    def createSubReader(self):
+        self.subname = self.filename.split('.')[0] + '.srt'
+        if os.path.exists(self.subname):
+            self.subs = SrtParser(self.subname, self.framerate, self.totalframes)
 
     def packRTP(self, payload, seq, current_frame, isLast):
         V, P, X, CC, PT, seqNum, M, SSRC, timestamp = 2, 0, 0, 0, 26, seq, 0, 0, current_frame
@@ -53,6 +62,10 @@ class VideoStream:
                 self.current_frame += self.step
                 photo_size = (480, 270) if not self.low_res else (320, 180)
                 frame = cv2.resize(frame, photo_size, interpolation=cv2.INTER_AREA)
+                if self.subs is not None:
+                    text = self.subs.next()
+                    if self.subtitle_required and text is not None:
+                        cv2.putText(frame, text[1:], (50, 50), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255))
                 stashed = cv2.imencode('.jpg', frame)[1]
                 stashed = np.array(stashed).tobytes()
                 num_slices = ceil(len(stashed) / self.max_frame)
@@ -77,6 +90,8 @@ class VideoStream:
 
     def setPosition(self, pos):
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
+        if self.subs is not None:
+            self.subs.set(pos)
         self.current_frame = pos
 
     def setStep(self, step):
@@ -84,6 +99,13 @@ class VideoStream:
 
     def setLowResolution(self, lowres):
         self.low_res = lowres
+
+    def setSubtitles(self, subtitleRequired):
+        if subtitleRequired:
+            if self.subs is not None:
+                self.subtitle_required = True
+        else:
+            self.subtitle_required = False
 
 
 class AudioStream:
