@@ -70,8 +70,8 @@ class ClientUI:
         self.fullscreen.grid(row=3, column=1)
 
         self.sub = Button(self.master, width=12)
-        self.sub["text"] = "显示弹幕"
-        self.sub["command"] = self.subtitle()
+        self.sub["text"] = "显示字幕"
+        self.sub["command"] = self.subtitle
         self.sub.grid(row=3, column=4)
 
         self.playentry = Listbox(self.master, width=25, height=20)
@@ -188,7 +188,12 @@ class ClientUI:
         self.event_handlers['setFullscreen'](True)
 
     def subtitle(self):
-        pass
+        if self.sub['text'] == '显示字幕':
+            self.event_handlers['showSubtitle'](True)
+            self.sub['text'] = '关闭字幕'
+        else:
+            self.event_handlers['showSubtitle'](False)
+            self.sub['text'] = '显示字幕'
 
     def selectFile(self, event):
         index = int(self.playentry.curselection()[0])

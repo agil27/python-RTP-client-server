@@ -61,7 +61,8 @@ class ClientController:
         self.changeResolution = False
         self.fullscreen = False
         self.changeFullscreen = False
-        self.subtitleRequired = True
+        self.subtitleRequired = False
+        self.switchSubtitle = False
 
     def connect(self):
         self.rtsp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -271,6 +272,11 @@ class ClientController:
             self.video_buffer = LinkList()
             self.audio_buffer = LinkList()
             self.play()
+        if self.switchSubtitle:
+            self.switchSubtitle = False
+            self.video_buffer = LinkList()
+            self.audio_buffer = LinkList()
+            self.play()
 
     def handleTeardown(self):
         self.state = INIT
@@ -392,6 +398,11 @@ class ClientController:
     def setFullScreen(self, isFullscreen):
         self.fullscreen = isFullscreen
 
+    def showSubtitle(self, isSubtitleRequired):
+        self.subtitleRequired = isSubtitleRequired
+        if self.state == PLAYING:
+            self.switchSubtitle = True
+            self.sendPause()
 
 class Client:
     def __init__(self, serveraddr, serverport, rtpport, url):
@@ -433,7 +444,8 @@ class Client:
             'audioBias': self.client_controller.audioBias,
             'selectFile': self.selectFile,
             'setLowres': self.client_controller.setLowResolution,
-            'setFullscreen': self.client_controller.setFullScreen
+            'setFullscreen': self.client_controller.setFullScreen,
+            'showSubtitle': self.client_controller.showSubtitle
         }
         self.client_ui.setHandlers(self.event_handlers)
 
